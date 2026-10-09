@@ -1,0 +1,75 @@
+#!/bin/bash
+set -eu
+APP_NAME=fnos-power-scheduler
+POWER_EXE=/usr/local/libexec/fnos-power-scheduler/powerd
+RUNTIME=/run/fnos-power-scheduler
+SERVER_PID="$RUNTIME/server.pid"
+POWER_PID="$RUNTIME/power.pid"
+POWER_SOCKET="$RUNTIME/power.sock"
+SERVER_SOCKET="${TRIM_APPDEST}/app.sock"
+
+error() { printf '%s\n' "$*" > "$TRIM_TEMP_LOGFILE"; exit 1; }
+
+# Only signal a live process when its executable matches this application.
+running() {
+ [ -f "$1" ] || return 1
+ local pid
+ pid=$(cat "$1")
+ case "$pid" in ''|*[!0-9]*) return 1;; esac
+ [ "$(readlink "/proc/$pid/exe" 2>/dev/null || true)" = "$2" ]
+}
+stop_process() {
+ if running "$1" "$2"; then
+  local pid
+  pid=$(cat "$1")
+  kill -TERM "$pid"
+  for _ in $(seq 1 30); do
+   running "$1" "$2" || break
+   sleep 1
+  done
+  running "$1" "$2" && error "进程未能停止，请检查日志后重试"
+ fi
+ rm -f -- "$1"
+}
+
+case "${1:-}" in
+ start)
+  install -d -m 0755 -o root -g root "$RUNTIME"
+  if running "$SERVER_PID" "${TRIM_APPDEST}/bin/server" && running "$POWER_PID" "$POWER_EXE"; then exit 0; fi
+  # Recover partial starts without leaving an old server or helper behind.
+  stop_process "$SERVER_PID" "${TRIM_APPDEST}/bin/server"
+  stop_process "$POWER_PID" "$POWER_EXE"
+  # Paths are fixed app-owned sockets; never remove arbitrary directories.
+  rm -f -- "$SERVER_SOCKET" "$POWER_SOCKET"
+  install -d -m 0700 -o "$TRIM_USERNAME" -g "$TRIM_GROUPNAME" "$TRIM_PKGVAR"
+  uid=$(id -u "$TRIM_USERNAME")
+  "$POWER_EXE" --uid "$uid" >> "$RUNTIME/power.log" 2>&1 &
+  printf '%s\n' "$!" > "$POWER_PID"
+  for _ in $(seq 1 50); do [ -S "$POWER_SOCKET" ] && break; sleep 0.1; done
+  if [ ! -S "$POWER_SOCKET" ]; then stop_process "$POWER_PID" "$POWER_EXE"; error "电源辅助进程启动失败，请检查 /run/fnos-power-scheduler/power.log"; fi
+  # Gateway UID defaults to root. Override only after inspecting fnOS gateway ownership.
+  gateway_uid=0
+  if [ -f "$TRIM_PKGETC/gateway-uid" ]; then gateway_uid=$(cat "$TRIM_PKGETC/gateway-uid"); fi
+  case "$gateway_uid" in ''|*[!0-9]*) error "网关 UID 配置无效";; esac
+  runuser -u "$TRIM_USERNAME" -- "${TRIM_APPDEST}/bin/server" --data "$TRIM_PKGVAR" --web "${TRIM_APPDEST}/www" --socket "$SERVER_SOCKET" --power-socket "$POWER_SOCKET" --gateway-uid "$gateway_uid" >> "$RUNTIME/server.log" 2>&1 &
+  runner_pid=$!
+  # runuser is the parent; discover the actual server for verified stop/status checks.
+  for _ in $(seq 1 50); do
+   pid=$(pgrep -P "$runner_pid" -x server || true)
+   if [ -n "$pid" ] && [ -S "$SERVER_SOCKET" ]; then printf '%s\n' "$pid" > "$SERVER_PID"; exit 0; fi
+   sleep 0.1
+  done
+  if [ -n "${pid:-}" ]; then printf '%s\n' "$pid" > "$SERVER_PID"; stop_process "$SERVER_PID" "${TRIM_APPDEST}/bin/server"; fi
+  stop_process "$POWER_PID" "$POWER_EXE"
+  error "应用服务启动失败，请检查 /run/fnos-power-scheduler/server.log"
+  ;;
+ stop)
+  # Retain the RTC alarm: fnOS may call stop during a planned system shutdown.
+  stop_process "$SERVER_PID" "${TRIM_APPDEST}/bin/server"
+  stop_process "$POWER_PID" "$POWER_EXE"
+  ;;
+ status)
+  if running "$SERVER_PID" "${TRIM_APPDEST}/bin/server" && running "$POWER_PID" "$POWER_EXE"; then exit 0; else exit 3; fi
+  ;;
+ *) exit 1;;
+esac

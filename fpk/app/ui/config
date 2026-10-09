@@ -1,0 +1,15 @@
+{
+ ".url": {
+  "fnos-power-scheduler.main": {
+   "title":"电源计划",
+   "icon":"images/icon_{0}.png",
+   "type":"iframe",
+   "protocol":"",
+   "gatewayPrefix":"/app/fnos-power-scheduler",
+   "gatewaySocket":"app.sock",
+   "url":"/app/fnos-power-scheduler/",
+   "allUsers":false,
+   "control":{"accessPerm":"readonly"}
+  }
+ }
+}

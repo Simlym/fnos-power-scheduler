@@ -1,0 +1,10 @@
+* text=auto
+*.go text eol=lf
+*.sh text eol=lf
+fpk/cmd/* text eol=lf
+fpk/config/* text eol=lf
+fpk/wizard/* text eol=lf
+fpk/manifest text eol=lf
+fpk/app/ui/config text eol=lf
+*.png binary
+*.PNG binary

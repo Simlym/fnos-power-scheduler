@@ -1,0 +1,12 @@
+#!/bin/bash
+set -eu
+# Windows fnpack does not retain Unix execute bits. Install the privileged
+# executable outside the service-writable target directory.
+helper_dir=/usr/local/libexec/fnos-power-scheduler
+[ ! -L "$helper_dir" ] || exit 1
+install -d -m 0755 -o root -g root "$helper_dir"
+install -m 0755 -o root -g root "${TRIM_APPDEST}/bin/powerd" "$helper_dir/powerd"
+chmod 0755 "${TRIM_APPDEST}/bin/server"
+cmd_dir="/var/apps/fnos-power-scheduler/cmd"
+chown -R root:root "$cmd_dir"
+chmod 0755 "$cmd_dir" "$cmd_dir"/*

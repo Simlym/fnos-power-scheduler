@@ -1,0 +1,3 @@
+#!/bin/bash
+set -eu
+bash "/var/apps/fnos-power-scheduler/cmd/install_callback"

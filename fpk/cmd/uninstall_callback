@@ -1,0 +1,5 @@
+#!/bin/bash
+set -eu
+rm -f -- /usr/local/libexec/fnos-power-scheduler/powerd
+rmdir /usr/local/libexec/fnos-power-scheduler 2>/dev/null || true
+rmdir /var/lib/fnos-power-scheduler 2>/dev/null || true

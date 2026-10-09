@@ -1,0 +1,5 @@
+#!/bin/bash
+set -eu
+# Clear only an alarm still owned by this app. Do not disturb a replacement alarm.
+bash "/var/apps/fnos-power-scheduler/cmd/main" stop
+/usr/local/libexec/fnos-power-scheduler/powerd --cleanup

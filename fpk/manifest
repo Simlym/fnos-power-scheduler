@@ -1,0 +1,13 @@
+appname=fnos-power-scheduler
+version=0.1.0
+display_name=电源计划
+desc=为飞牛 fnOS 提供定时关机与 RTC 开机计划，支持单次、每天和每周规则，以及执行记录。
+source=thirdparty
+platform=x86
+maintainer=fnos-power-scheduler contributors
+os_min_version=1.1.3100
+desktop_uidir=ui
+desktop_applaunchname=fnos-power-scheduler.main
+ctl_stop=true
+checkport=false
+disable_authorization_path=true
