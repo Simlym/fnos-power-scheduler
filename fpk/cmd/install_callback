@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eu
-# Windows fnpack does not retain Unix execute bits. Install the privileged
-# executable outside the service-writable target directory.
+# Build scripts normalize archive execute bits before installation. Install
+# the privileged executable outside the service-writable target directory.
 helper_dir=/usr/local/libexec/fnos-power-scheduler
 [ ! -L "$helper_dir" ] || exit 1
 install -d -m 0755 -o root -g root "$helper_dir"

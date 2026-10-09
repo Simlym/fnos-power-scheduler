@@ -16,7 +16,7 @@
 
 ## 本地开发（Windows）
 
-需要 Go 1.24+ 和 Node.js 22.12+。本次开发下载的 Go 工具链位于忽略的 `work/sdk/go` 中；开发脚本优先使用它，再寻找系统 Go。
+需要 Go 1.24+ 和 Node.js 22.12+。打包还需要 Python 3.9+ 和官方 fnpack 1.2.3（用 `fnpack --help` 查看版本）。开发脚本优先使用忽略目录 `work/sdk/go` 中的 Go，再寻找系统 Go。
 
 ```powershell
 cd web
@@ -35,11 +35,31 @@ go test ./...
 .\scripts\build.ps1
 ```
 
-构建结果在 `dist/fpk`：包含 Linux amd64 的两个程序、前端及飞牛应用配置。安装官方 `fnpack` 后执行：
+Windows 构建默认使用 `work/fnpack.exe` 或 PATH 中的 `fnpack`，也可以指定路径：
 
 ```powershell
-fnpack build --directory dist/fpk
+.\scripts\build.ps1 -FnpackPath C:\tools\fnpack.exe
 ```
+
+Linux / WSL 构建：
+
+```bash
+bash scripts/build.sh
+# 工具不在 PATH 时：
+GO_BIN=/path/to/go FNPACK_BIN=/path/to/fnpack bash scripts/build.sh
+```
+
+真正可安装的产物是 `dist/fnos-power-scheduler.fpk`，不是 `dist/fpk` 暂存目录。脚本缺少打包工具或校验失败时返回错误；每次重建清理暂存目录和旧安装包。
+
+fnpack 生成后，`scripts/fpk.py` 将内外两层归档统一为 USTAR，目录为 0755、普通文件为 0644、生命周期脚本和两个程序为 0755，归档所有者为 root。这样 Windows 源文件缺少 Unix 执行位时，也不依赖安装回调先执行才能修复权限。修改 `app.tgz` 后同步更新 manifest 中的 MD5 checksum，并检查包结构、脚本换行、JSON 配置、Linux x86_64 ELF 程序和权限；旁边生成 SHA256 文件用于核对传输。
+
+已有安装包可以独立检查：
+
+```bash
+python3 scripts/fpk.py verify dist/fnos-power-scheduler.fpk
+```
+
+归档检查通过不代表已通过飞牛实机安装验收。如报“应用包格式不符合系统版本要求”，请提供实际上传的 FPK 和 NAS 的完整 fnOS 系统版本（NAS 网页设置中查看，手机 App 的版本不等于系统版本）。当前保留 `os_min_version=1.1.3100`，不通过降低版本声明绕过网关兼容性要求。
 
 图标源生成脚本：`scripts/generate-icons.ps1`。GitHub 仓库已经包括生成的 PNG，无需每次构建重新生成。
 

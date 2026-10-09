@@ -7,3 +7,4 @@ web/dist/
 *.db-wal
 *.exe
 *.fpk
+__pycache__/
