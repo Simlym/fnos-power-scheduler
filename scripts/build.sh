@@ -11,7 +11,7 @@ task_fnpack=$(python3 -c 'import os, shutil, sys; print(os.path.abspath(shutil.w
 task_fnpack_help=$("$task_fnpack" --help)
 [[ "$task_fnpack_help" == *"Version 1.2.3"* ]] || { echo "Use fnpack 1.2.3; inspect fnpack --help for its version." >&2; exit 1; }
 (cd web && npm ci && npm run build)
-"$task_go" test ./...
+"$task_go" test ./cmd/... ./internal/...
 task_stage="$task_root/dist/fpk"
 rm -rf -- "$task_stage"
 mkdir -p "$task_stage"

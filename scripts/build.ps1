@@ -16,7 +16,7 @@ Push-Location $taskRoot
 try {
  Push-Location web
  try { npm ci; if ($LASTEXITCODE -ne 0) { throw 'Frontend dependency install failed' }; npm run build; if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed' } } finally { Pop-Location }
- & $taskGo test ./...
+ & $taskGo test ./cmd/... ./internal/...
  if ($LASTEXITCODE -ne 0) { throw 'Go tests failed' }
  $taskStage = Join-Path $taskRoot 'dist\fpk'
  if (Test-Path -LiteralPath $taskStage) { Remove-Item -LiteralPath $taskStage -Recurse -Force }

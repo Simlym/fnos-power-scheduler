@@ -1,6 +1,7 @@
 """Normalize and check the installable archive produced by fnpack (Python 3.9+)."""
 
 import argparse
+import gzip
 import hashlib
 import io
 import json
@@ -30,11 +31,23 @@ def read_archive(data):
 
 def write_archive(entries, executable):
     result = io.BytesIO()
-    with tarfile.open(fileobj=result, mode="w:gz", format=tarfile.USTAR_FORMAT) as archive:
-        for name, (_, content) in sorted(entries.items()):
+    is_package = "app.tgz" in entries
+    def order(name):
+        if name == "app.tgz":
+            return (0, name)
+        if name == "cmd" or name.startswith("cmd/"):
+            return (1, name)
+        if name == "config" or name.startswith("config/"):
+            return (2, name)
+        return (3, name)
+    names = sorted(entries, key=order) if is_package else sorted(entries)
+    with gzip.GzipFile(fileobj=result, mode="wb", compresslevel=6, mtime=0) as zipped, \
+            tarfile.open(fileobj=zipped, mode="w", format=tarfile.USTAR_FORMAT) as archive:
+        for name in names:
+            _, content = entries[name]
             member = tarfile.TarInfo(name)
             member.uid = member.gid = 0
-            member.uname = member.gname = "root"
+            member.uname = member.gname = "" if is_package else "root"
             member.mode = 0o755 if content is None or executable(name) else 0o644
             if content is None:
                 member.type = tarfile.DIRTYPE
@@ -68,14 +81,20 @@ def validate(data):
     values = manifest_values(required(outer, "manifest"))
     if values.get("appname") != "fnos-power-scheduler" or values.get("platform") != "x86":
         raise ValueError("Expected fnos-power-scheduler with platform=x86")
-    for name in ("ICON.PNG", "ICON_256.PNG", "config/privilege", "config/resource",
-                 "wizard/install", "wizard/uninstall"):
+    for name in ("ICON.PNG", "ICON_256.PNG", "config/privilege", "config/resource"):
         required(outer, name)
     payload = required(outer, "app.tgz")
     if values.get("checksum") != hashlib.md5(payload).hexdigest():
         raise ValueError("manifest checksum does not match app.tgz")
-    for name in ("config/privilege", "config/resource", "wizard/install", "wizard/uninstall"):
+    for name in ("config/privilege", "config/resource"):
         json.loads(required(outer, name))
+    for name in ("wizard/install", "wizard/uninstall", "wizard/upgrade", "wizard/config"):
+        if name in outer:
+            steps = json.loads(required(outer, name))
+            if not isinstance(steps, list):
+                raise ValueError(f"Expected wizard step array: {name}")
+            if not steps:
+                raise ValueError(f"Empty wizard is not installable; omit the file: {name}")
     for name in ("cmd/main", "cmd/install_init", "cmd/install_callback",
                  "cmd/uninstall_init", "cmd/uninstall_callback", "cmd/upgrade_init",
                  "cmd/upgrade_callback", "cmd/config_init", "cmd/config_callback"):
@@ -111,7 +130,8 @@ def normalize(path):
     outer["app.tgz"] = (0o644, payload)
     values = manifest_values(required(outer, "manifest"))
     values["checksum"] = hashlib.md5(payload).hexdigest()
-    outer["manifest"] = (0o644, "".join(f"{key}={value}\n" for key, value in values.items()).encode("utf-8"))
+    width = max(map(len, values))
+    outer["manifest"] = (0o644, "".join(f"{key:<{width}} = {value}\n" for key, value in values.items()).encode("utf-8"))
     data = write_archive(outer, lambda name: name.startswith("cmd/"))
     validate(data)
     descriptor, temporary = tempfile.mkstemp(dir=path.parent, suffix=".tmp")

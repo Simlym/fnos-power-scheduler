@@ -24,7 +24,8 @@ def fixture(machine=62):
                      f"checksum={hashlib.md5(payload).hexdigest()}\n").encode(),
         "app.tgz": payload, "ICON.PNG": b"icon", "ICON_256.PNG": b"icon",
         "config/privilege": b"{}", "config/resource": b"{}",
-        "wizard/install": b"[]", "wizard/uninstall": b"[]",
+        "wizard/install": b'[{"stepTitle":"Setup","items":[{"type":"tips","helpText":"Setup"}]}]',
+        "wizard/uninstall": b'[{"stepTitle":"Uninstall","items":[{"type":"tips","helpText":"Uninstall"}]}]',
     }.items()}
     for name in ("main", "install_init", "install_callback", "uninstall_init",
                  "uninstall_callback", "upgrade_init", "upgrade_callback",
@@ -34,6 +35,24 @@ def fixture(machine=62):
 
 
 class PackageTests(unittest.TestCase):
+    def test_empty_wizard_is_rejected(self):
+        for name in ("wizard/install", "wizard/uninstall", "wizard/upgrade", "wizard/config"):
+            with self.subTest(name=name):
+                outer = fpk.read_archive(fixture())
+                outer[name] = (0o644, b"[]\n")
+                with self.assertRaisesRegex(ValueError, "Empty wizard"):
+                    fpk.validate(fpk.write_archive(outer, lambda path: path.startswith("cmd/")))
+
+    def test_package_without_optional_wizards_is_valid(self):
+        outer = fpk.read_archive(fixture())
+        del outer["wizard/install"]
+        del outer["wizard/uninstall"]
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "app.fpk"
+            package.write_bytes(fpk.write_archive(outer, lambda name: name.startswith("cmd/")))
+            fpk.normalize(package)
+            fpk.validate(package.read_bytes())
+
     def test_windows_permissions_are_fixed_and_checksum_is_updated(self):
         with tempfile.TemporaryDirectory() as directory:
             package = Path(directory) / "app.fpk"

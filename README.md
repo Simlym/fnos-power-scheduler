@@ -31,7 +31,7 @@ cd ..
 ## 测试与构建
 
 ```powershell
-go test ./...
+go test ./cmd/... ./internal/...
 .\scripts\build.ps1
 ```
 
@@ -60,6 +60,8 @@ python3 scripts/fpk.py verify dist/fnos-power-scheduler.fpk
 ```
 
 归档检查通过不代表已通过飞牛实机安装验收。如报“应用包格式不符合系统版本要求”，请提供实际上传的 FPK 和 NAS 的完整 fnOS 系统版本（NAS 网页设置中查看，手机 App 的版本不等于系统版本）。当前保留 `os_min_version=1.1.3100`，不通过降低版本声明绕过网关兼容性要求。
+
+在 fnOS V1.2.0701 的安装对照中，包含 `wizard/install=[]` 和 `wizard/uninstall=[]` 的 A 包返回 10111，移除向导目录的 B 包安装成功。本应用不需要安装或卸载表单，因此不打包向导文件；校验器拒绝空向导数组，避免再次生成同类问题包。此结果验证安装兼容性，RTC 和真实关机仍需实机验收。
 
 图标源生成脚本：`scripts/generate-icons.ps1`。GitHub 仓库已经包括生成的 PNG，无需每次构建重新生成。
 
