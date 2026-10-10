@@ -3,7 +3,7 @@ Add-Type -AssemblyName System.Drawing
 $taskRoot = Split-Path -Parent $PSScriptRoot
 $taskImages = Join-Path $taskRoot 'fpk\app\ui\images'
 New-Item -ItemType Directory -Force -Path $taskImages | Out-Null
-# Match web/src/assets/app-icon.svg. Supersample for clean launcher icons.
+# Supersample for clean launcher icons.
 function New-RoundedPath([single]$x,[single]$y,[single]$width,[single]$height,[single]$radius) {
  $path=[System.Drawing.Drawing2D.GraphicsPath]::new()
  $diameter=$radius*2

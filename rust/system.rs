@@ -126,7 +126,7 @@ impl Rtc {
     pub fn status(&self) -> Value {
         match self.read() {
             Ok(alarm) => {
-                json!({"mode":"hardware","available":true,"alarm":alarm,"message":"检测到 RTC 接口；关机唤醒仍需实机验证"})
+                json!({"mode":"hardware","available":true,"alarm":alarm,"message":"RTC 接口可用"})
             }
             Err(e) => {
                 json!({"mode":"hardware","available":false,"alarm":0,"message":e.to_string()})

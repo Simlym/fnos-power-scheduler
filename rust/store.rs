@@ -290,13 +290,13 @@ mod tests {
         );
     }
     #[test]
-    fn legacy_schema_is_preserved() {
+    fn existing_schema_is_preserved() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("scheduler.db");
         let old = Connection::open(&path).unwrap();
         old.execute_batch("CREATE TABLE tasks(id TEXT PRIMARY KEY,body TEXT NOT NULL); CREATE TABLE records(id INTEGER PRIMARY KEY,task_id TEXT,name TEXT,at TEXT,status TEXT,message TEXT); CREATE TABLE occurrences(task_id TEXT,at TEXT,PRIMARY KEY(task_id,at));").unwrap();
         let (_, mut t, now) = setup();
-        t.id = "legacy123".into();
+        t.id = "existing123".into();
         old.execute(
             "INSERT INTO tasks VALUES(?,?)",
             params![t.id, serde_json::to_string(&t).unwrap()],
@@ -304,7 +304,7 @@ mod tests {
         .unwrap();
         drop(old);
         let s = Store::open(&path).unwrap();
-        assert_eq!(s.tasks().unwrap()[0].id, "legacy123");
+        assert_eq!(s.tasks().unwrap()[0].id, "existing123");
         assert!(s.view(now, json!({})).is_ok());
     }
     #[test]

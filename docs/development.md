@@ -1,7 +1,6 @@
-# Rust 0.2.1：系统调度版本
+# 开发与运行说明
 
-本分支用 Rust 实现后端，保留 Vue 页面及旧 SQLite 的 tasks、records、occurrences 表。
-旧 Go 源码暂保留作迁移参考，不进入 Rust 安装包，构建不再需要 Go。
+后端使用 Rust，界面使用 Vue，SQLite 保存计划、执行记录和执行去重信息。当前版本为 0.2.1 开发版。
 
 ## 运行方式
 
@@ -14,7 +13,7 @@
 网页后台按需启动暂不实现。关闭浏览器后只保留 Rust server；systemd 管理监听接口和 timer，没有常驻 powerd。
 页面打开期间每两秒查询一次，每次查询会短暂启动一个 control 进程。
 
-## 行为变化
+## 调度行为
 
 **停止应用只停止管理入口，已应用的关机 timer 和 RTC 闹钟继续有效。**
 停止应用取消当前正在倒计时的关机。需要暂停所有自动动作时先在页面禁用全部计划。
@@ -31,13 +30,13 @@ RTC 不存在、被其他程序占用、读回不一致或下一次唤醒距离�
 
 ## 数据与权限
 
-安装启动时将应用数据目录及 SQLite 文件修复为 root 专用，不删除旧计划和记录。
+安装启动时将应用数据目录及 SQLite 文件修复为 root 专用，保留已有计划和记录。
 fnps 网页进程通过 /run/fnos-power-scheduler/power.sock 请求数据；root 电源程序再次校验 SO_PEERCRED。
 网关身份、管理员 Header 和写操作校验 Header 保持检查；不新增 TCP 管理端口。
 root 可执行文件仍复制到 /usr/local/libexec/fnos-power-scheduler，不能从网页可写目录执行。
 任务 ID、时区和时间严格校验，生成 service 时不拼接用户任务名称或任意命令。
 数据库保存与 timer/RTC 应用分别记录；系统应用失败时页面展示错误，修复后重新保存规则重试。
-新数据库增加 metadata、pending 表；保留旧表格式。
+数据库包含 tasks、records、occurrences、metadata 和 pending 表。
 
 ## 构建
 
@@ -66,7 +65,7 @@ bash scripts/build.sh
 
 ## 飞牛验收
 
-升级前备份原应用数据。升级应停止旧 Go 后台后再替换程序，避免两套调度并行。
+更新前备份应用数据，通过应用管理界面安装新的 FPK。
 
 ```bash
 ps -p "$(cat /run/fnos-power-scheduler/server.pid)" -o pid,user,rss,%cpu,args
@@ -81,5 +80,3 @@ cat /sys/class/rtc/rtc0/wakealarm
 用一次关机倒计时取消和一次真实关机/RTC 唤醒测试，再验证两组以上开关机以及重启后计划恢复。
 确认停止应用后 timer 仍存在、禁用规则后 timer 删除、卸载后无遗留 timer。
 Unix Socket 激活、应用生命周期和真实 RTC 唤醒仍需在目标 fnOS 实测，本地自动测试不能代替实机验收。
-
-如需退回旧版，先禁用全部规则，卸载 Rust 版并保留数据，再安装旧版；不要直接覆盖，否则旧版不会清理 Rust timer。
