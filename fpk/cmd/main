@@ -1,82 +1,113 @@
 #!/bin/bash
 set -eu
-APP_NAME=fnos-power-scheduler
-POWER_EXE=/usr/local/libexec/fnos-power-scheduler/powerd
 RUNTIME=/run/fnos-power-scheduler
+POWER_EXE=/usr/local/libexec/fnos-power-scheduler/powerd
+STATE=/var/lib/fnos-power-scheduler
 SERVER_PID="$RUNTIME/server.pid"
-POWER_PID="$RUNTIME/power.pid"
-POWER_SOCKET="$RUNTIME/power.sock"
-SERVER_SOCKET="${TRIM_APPDEST}/app.sock"
 
-error() {
- printf '%s\n' "$*" >&2
- printf '%s\n' "$*" >> "$RUNTIME/startup.log"
- if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then printf '%s\n' "$*" > "$TRIM_TEMP_LOGFILE"; fi
- exit 1
-}
-
-# Only signal a live process when its executable matches this application.
 running() {
- [ -f "$1" ] || return 1
+ [ -f "$SERVER_PID" ] || return 1
  local pid
- pid=$(cat "$1")
+ pid=$(cat "$SERVER_PID")
  case "$pid" in ''|*[!0-9]*) return 1;; esac
- [ "$(readlink "/proc/$pid/exe" 2>/dev/null || true)" = "$2" ]
+ [ "$(readlink "/proc/$pid/exe" 2>/dev/null || true)" = "${TRIM_APPDEST}/bin/server" ]
 }
-stop_process() {
- if running "$1" "$2"; then
-  local pid
-  pid=$(cat "$1")
-  kill -TERM "$pid"
-  for _ in $(seq 1 30); do
-   running "$1" "$2" || break
-   sleep 1
-  done
-  running "$1" "$2" && error "进程未能停止，请检查日志后重试"
+error() { printf '%s\n' "$*" >&2; printf '%s\n' "$*" >> "$RUNTIME/startup.log"; exit 1; }
+stop_web() {
+ if running; then
+  kill -TERM "$(cat "$SERVER_PID")"
+  for _ in $(seq 1 30); do running || break; sleep 1; done
+  running && error '网页后台未能停止'
  fi
- rm -f -- "$1"
+ rm -f -- "$SERVER_PID"
 }
-
 case "${1:-}" in
  start)
   install -d -m 0755 -o root -g root "$RUNTIME"
-  if running "$SERVER_PID" "${TRIM_APPDEST}/bin/server" && running "$POWER_PID" "$POWER_EXE"; then exit 0; fi
-  # Recover partial starts without leaving an old server or helper behind.
-  stop_process "$SERVER_PID" "${TRIM_APPDEST}/bin/server"
-  stop_process "$POWER_PID" "$POWER_EXE"
-  # Paths are fixed app-owned sockets; never remove arbitrary directories.
-  rm -f -- "$SERVER_SOCKET" "$POWER_SOCKET"
-  if ! bash "$(dirname -- "$0")/prepare_data" "$TRIM_PKGVAR" "$TRIM_USERNAME" "$TRIM_GROUPNAME" >> "$RUNTIME/startup.log" 2>&1; then
-   error "应用数据目录或数据库权限检查失败，请检查 /run/fnos-power-scheduler/startup.log"
-  fi
+  [ ! -L "$STATE" ] || error '无效状态目录'
+  install -d -m 0700 -o root -g root "$STATE"
+  running && exit 0
+  bash "$(dirname -- "$0")/prepare_data" "$TRIM_PKGVAR" root root >> "$RUNTIME/startup.log" 2>&1 || error '数据库权限检查失败'
   uid=$(id -u "$TRIM_USERNAME")
-  "$POWER_EXE" --uid "$uid" >> "$RUNTIME/power.log" 2>&1 &
-  printf '%s\n' "$!" > "$POWER_PID"
-  for _ in $(seq 1 50); do [ -S "$POWER_SOCKET" ] && break; sleep 0.1; done
-  if [ ! -S "$POWER_SOCKET" ]; then stop_process "$POWER_PID" "$POWER_EXE"; error "电源辅助进程启动失败，请检查 /run/fnos-power-scheduler/power.log"; fi
-  # Gateway UID defaults to root. Override only after inspecting fnOS gateway ownership.
+  "$POWER_EXE" configure "$TRIM_PKGVAR" "$uid"
+  data_dir=$(readlink -f -- "$TRIM_PKGVAR")
+  case "$data_dir" in *[!a-zA-Z0-9_/@.-]*) error '数据路径包含不支持的字符';; esac
+  cat > /etc/systemd/system/fnps-rust-control.socket <<EOF
+[Unit]
+Description=Power schedule management socket
+[Socket]
+ListenStream=$RUNTIME/power.sock
+SocketUser=$TRIM_USERNAME
+SocketMode=0600
+Accept=yes
+MaxConnections=16
+RemoveOnStop=yes
+[Install]
+WantedBy=sockets.target
+EOF
+  cat > /etc/systemd/system/fnps-rust-control@.service <<EOF
+[Unit]
+Description=Power schedule management request
+RequiresMountsFor=$data_dir
+[Service]
+Type=exec
+ExecStart=$POWER_EXE control
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=60
+RuntimeMaxSec=60
+UMask=0077
+NoNewPrivileges=yes
+EOF
+  cat > /etc/systemd/system/fnps-rust-lifecycle.service <<EOF
+[Unit]
+Description=Power schedule boot recovery and RTC shutdown hook
+After=local-fs.target time-sync.target
+RequiresMountsFor=$data_dir
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=$POWER_EXE boot
+ExecStop=$POWER_EXE reconcile
+TimeoutStartSec=90
+TimeoutStopSec=15
+UMask=0077
+[Install]
+WantedBy=multi-user.target
+EOF
+  /usr/bin/systemctl daemon-reload
+  rm -f -- "$RUNTIME/power.pid"
+  /usr/bin/systemctl enable --now fnps-rust-control.socket
+  /usr/bin/systemctl enable fnps-rust-lifecycle.service
+  /usr/bin/systemctl start fnps-rust-lifecycle.service
+  # Record application restart protection, even when lifecycle is already active.
+  "$POWER_EXE" init >> "$RUNTIME/startup.log" 2>&1 || error '计划应用失败，请检查 startup.log'
   gateway_uid=0
   if [ -f "$TRIM_PKGETC/gateway-uid" ]; then gateway_uid=$(cat "$TRIM_PKGETC/gateway-uid"); fi
-  case "$gateway_uid" in ''|*[!0-9]*) error "网关 UID 配置无效";; esac
-  runuser -u "$TRIM_USERNAME" -- "${TRIM_APPDEST}/bin/server" --data "$TRIM_PKGVAR" --web "${TRIM_APPDEST}/www" --socket "$SERVER_SOCKET" --power-socket "$POWER_SOCKET" --gateway-uid "$gateway_uid" >> "$RUNTIME/server.log" 2>&1 &
-  runner_pid=$!
-  # runuser is the parent; discover the actual server for verified stop/status checks.
+  case "$gateway_uid" in ''|*[!0-9]*) error '网关 UID 无效';; esac
+  rm -f -- "${TRIM_APPDEST}/app.sock"
+  runuser -u "$TRIM_USERNAME" -- "${TRIM_APPDEST}/bin/server" --web "${TRIM_APPDEST}/www" --socket "${TRIM_APPDEST}/app.sock" --power-socket "$RUNTIME/power.sock" --gateway-uid "$gateway_uid" >> "$RUNTIME/server.log" 2>&1 &
+  runner=$!
   for _ in $(seq 1 50); do
-   pid=$(pgrep -P "$runner_pid" -x server || true)
-   if [ -n "$pid" ] && [ -S "$SERVER_SOCKET" ]; then printf '%s\n' "$pid" > "$SERVER_PID"; exit 0; fi
+   pid=$(pgrep -P "$runner" -x server || true)
+   if [ -n "$pid" ] && [ -S "${TRIM_APPDEST}/app.sock" ]; then printf '%s\n' "$pid" > "$SERVER_PID"; exit 0; fi
    sleep 0.1
   done
-  if [ -n "${pid:-}" ]; then printf '%s\n' "$pid" > "$SERVER_PID"; stop_process "$SERVER_PID" "${TRIM_APPDEST}/bin/server"; fi
-  stop_process "$POWER_PID" "$POWER_EXE"
-  error "应用服务启动失败，请检查 /run/fnos-power-scheduler/server.log"
+  if [ -n "${pid:-}" ]; then printf '%s\n' "$pid" > "$SERVER_PID"; stop_web; fi
+  error 'Rust 网页服务启动失败，请检查 server.log'
   ;;
  stop)
-  # Retain the RTC alarm: fnOS may call stop during a planned system shutdown.
-  stop_process "$SERVER_PID" "${TRIM_APPDEST}/bin/server"
-  stop_process "$POWER_PID" "$POWER_EXE"
+  stop_web
+  if [ -f /etc/systemd/system/fnps-rust-control.socket ]; then
+   /usr/bin/systemctl stop fnps-rust-control.socket
+   /usr/bin/systemctl stop 'fnps-rust-control@*.service'
+  fi
+  if [ -f "$STATE/rust-config.json" ]; then "$POWER_EXE" cancel-stop; fi
+  # Keep applied plans active when the management application is stopped.
   ;;
  status)
-  if running "$SERVER_PID" "${TRIM_APPDEST}/bin/server" && running "$POWER_PID" "$POWER_EXE"; then exit 0; else exit 3; fi
+  if running && /usr/bin/systemctl is-active --quiet fnps-rust-control.socket; then exit 0; else exit 3; fi
   ;;
  *) exit 1;;
 esac

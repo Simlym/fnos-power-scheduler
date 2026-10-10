@@ -8,3 +8,4 @@ web/dist/
 *.exe
 *.fpk
 __pycache__/
+target/

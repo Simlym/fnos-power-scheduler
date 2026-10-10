@@ -1,0 +1,32 @@
+[package]
+name = "fnos-power-scheduler"
+version = "0.2.1"
+edition = "2024"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.37", features = ["bundled"] }
+httparse = "1"
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "server"
+path = "rust/server.rs"
+
+[[bin]]
+name = "powerd"
+path = "rust/powerd.rs"
+
+[lib]
+path = "rust/lib.rs"

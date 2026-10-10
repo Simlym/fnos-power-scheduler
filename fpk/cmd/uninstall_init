@@ -2,4 +2,9 @@
 set -eu
 # Clear only an alarm still owned by this app. Do not disturb a replacement alarm.
 bash "/var/apps/fnos-power-scheduler/cmd/main" stop
-/usr/local/libexec/fnos-power-scheduler/powerd --cleanup
+/usr/bin/systemctl stop 'fnps-rust-plan-*.service'
+/usr/bin/systemctl disable --now fnps-rust-control.socket fnps-rust-lifecycle.service
+/usr/local/libexec/fnos-power-scheduler/powerd cleanup
+rm -f -- /etc/systemd/system/fnps-rust-control.socket /etc/systemd/system/fnps-rust-control@.service /etc/systemd/system/fnps-rust-lifecycle.service
+/usr/bin/systemctl daemon-reload
+rm -f -- /var/lib/fnos-power-scheduler/rust-config.json
