@@ -1,0 +1,105 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CC_x86_64_unknown_linux_musl: musl-gcc
+      CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER: musl-gcc
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.12.0'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Check versions
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$REF_TYPE" == tag ]]; then
+            python3 scripts/check_version.py --tag "$REF_NAME"
+          else
+            python3 scripts/check_version.py
+          fi
+      - name: Install Rust and musl tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes musl-tools
+          rustup toolchain install 1.96.0 --profile minimal
+          rustup default 1.96.0
+          rustup target add x86_64-unknown-linux-musl
+      - name: Install verified fnpack 1.2.3
+        run: |
+          mkdir -p "$RUNNER_TEMP/fnpack"
+          curl --fail --location --retry 3 --proto '=https' --tlsv1.2 \
+            https://static2.fnnas.com/fnpack/fnpack-1.2.3-linux-amd64 \
+            --output "$RUNNER_TEMP/fnpack/fnpack"
+          echo "54b97fa7b70968c4d05c79840f5daeff508957d0bb2062fdb0376d00d9615c93  $RUNNER_TEMP/fnpack/fnpack" | sha256sum --check
+          chmod 0755 "$RUNNER_TEMP/fnpack/fnpack"
+          echo "$RUNNER_TEMP/fnpack" >> "$GITHUB_PATH"
+      - name: Test packaging tools
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Build and validate installable package
+        run: |
+          bash scripts/build.sh
+          python3 scripts/fpk.py verify dist/fnos-power-scheduler.fpk
+          cd dist
+          sha256sum --check fnos-power-scheduler.fpk.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fnos-power-scheduler-${{ github.sha }}
+          path: |
+            dist/fnos-power-scheduler.fpk
+            dist/fnos-power-scheduler.fpk.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: fnos-power-scheduler-${{ github.sha }}
+          path: dist
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cd dist
+          sha256sum --check fnos-power-scheduler.fpk.sha256
+          release_options=()
+          if [[ "$RELEASE_TAG" == *-* ]]; then
+            release_options+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" \
+            fnos-power-scheduler.fpk fnos-power-scheduler.fpk.sha256 \
+            --verify-tag --title "$RELEASE_TAG" --generate-notes \
+            "${release_options[@]}"
