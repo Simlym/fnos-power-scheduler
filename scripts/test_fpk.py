@@ -27,7 +27,7 @@ def fixture(machine=62):
         "wizard/install": b'[{"stepTitle":"Setup","items":[{"type":"tips","helpText":"Setup"}]}]',
         "wizard/uninstall": b'[{"stepTitle":"Uninstall","items":[{"type":"tips","helpText":"Uninstall"}]}]',
     }.items()}
-    for name in ("main", "install_init", "install_callback", "uninstall_init",
+    for name in ("main", "prepare_data", "install_init", "install_callback", "uninstall_init",
                  "uninstall_callback", "upgrade_init", "upgrade_callback",
                  "config_init", "config_callback"):
         outer[f"cmd/{name}"] = (0o600, b"#!/bin/bash\nexit 0\n")
@@ -35,6 +35,12 @@ def fixture(machine=62):
 
 
 class PackageTests(unittest.TestCase):
+    def test_missing_database_permission_repair_is_rejected(self):
+        outer = fpk.read_archive(fixture())
+        del outer["cmd/prepare_data"]
+        with self.assertRaisesRegex(ValueError, "Missing file: cmd/prepare_data"):
+            fpk.validate(fpk.write_archive(outer, lambda name: name.startswith("cmd/")))
+
     def test_empty_wizard_is_rejected(self):
         for name in ("wizard/install", "wizard/uninstall", "wizard/upgrade", "wizard/config"):
             with self.subTest(name=name):

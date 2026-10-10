@@ -62,7 +62,7 @@ func Open(path string, controller power.Controller) (*App, error) {
  CREATE TABLE IF NOT EXISTS occurrences(task_id TEXT,at TEXT,PRIMARY KEY(task_id,at));`)
 	if err != nil {
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("初始化数据库 %q 失败（请检查数据目录、数据库及 WAL/SHM 文件的读写权限）：%w", path, err)
 	}
 	a := &App{db: db, controller: controller, tasks: []schedule.Task{}, clock: time.Now, protection: time.Now().Add(2 * time.Minute), last: time.Now()}
 	rows, err := db.Query("SELECT body FROM tasks ORDER BY id")

@@ -1,0 +1,27 @@
+#!/bin/bash
+set -eu
+
+# fnOS may retain var on uninstall while recreating the package user's UID.
+# Repair only this application's database and SQLite sidecars, preserving data.
+data_dir=$(readlink -f -- "$1")
+app_user=$2
+app_group=$3
+[ -n "$data_dir" ] && [ "$data_dir" != / ] || { echo '无效的应用数据目录' >&2; exit 1; }
+install -d -m 0700 -o "$app_user" -g "$app_group" "$data_dir"
+for name in scheduler.db scheduler.db-wal scheduler.db-shm scheduler.db-journal; do
+ file="$data_dir/$name"
+ if [ -L "$file" ]; then
+  echo "数据库文件不能是符号链接：$file" >&2
+  exit 1
+ fi
+ if [ -e "$file" ]; then
+  [ -f "$file" ] || { echo "数据库路径不是普通文件：$file" >&2; exit 1; }
+  chown -- "$app_user:$app_group" "$file"
+  chmod 0600 "$file"
+ fi
+done
+runuser -u "$app_user" -- test -w "$data_dir" || { echo "应用用户无法写入数据目录：$data_dir" >&2; exit 1; }
+if [ -f "$data_dir/scheduler.db" ]; then
+ runuser -u "$app_user" -- test -r "$data_dir/scheduler.db"
+ runuser -u "$app_user" -- test -w "$data_dir/scheduler.db"
+fi

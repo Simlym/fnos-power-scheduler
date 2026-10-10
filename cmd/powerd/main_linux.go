@@ -142,7 +142,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		respond := func(code int, s power.Status) { w.WriteHeader(code); json.NewEncoder(w).Encode(s) }
 		current, err := read()
-		s := power.Status{Mode: "hardware", Available: err == nil, Alarm: current, Message: "检测到 RTC 接口；关机唤醒仍需实机验证"}
+		s := power.Status{Mode: "hardware", Available: err == nil, Alarm: current, Message: "RTC 定时唤醒已就绪"}
 		if err != nil {
 			s.Message = err.Error()
 			respond(503, s)

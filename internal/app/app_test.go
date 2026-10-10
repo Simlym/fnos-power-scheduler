@@ -5,6 +5,8 @@ import (
 	"fnos-power-scheduler/internal/power"
 	"fnos-power-scheduler/internal/schedule"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -12,6 +14,18 @@ import (
 type fakePower struct {
 	calls []power.Request
 	fail  bool
+}
+
+func TestDatabaseOpenErrorIncludesPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "scheduler.db")
+	a, err := Open(path, &fakePower{})
+	if a != nil {
+		a.Close()
+		t.Fatal("unexpected database opened")
+	}
+	if err == nil || !strings.Contains(err.Error(), strconv.Quote(path)) || !strings.Contains(err.Error(), "读写权限") {
+		t.Fatalf("missing database context: %v", err)
+	}
 }
 
 func (f *fakePower) Do(r power.Request) (power.Status, error) {

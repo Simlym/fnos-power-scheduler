@@ -95,7 +95,7 @@ def validate(data):
                 raise ValueError(f"Expected wizard step array: {name}")
             if not steps:
                 raise ValueError(f"Empty wizard is not installable; omit the file: {name}")
-    for name in ("cmd/main", "cmd/install_init", "cmd/install_callback",
+    for name in ("cmd/main", "cmd/prepare_data", "cmd/install_init", "cmd/install_callback",
                  "cmd/uninstall_init", "cmd/uninstall_callback", "cmd/upgrade_init",
                  "cmd/upgrade_callback", "cmd/config_init", "cmd/config_callback"):
         script = required(outer, name)

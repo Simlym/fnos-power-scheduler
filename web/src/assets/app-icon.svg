@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+ <defs>
+  <linearGradient id="tile" x1="30" y1="12" x2="218" y2="248" gradientUnits="userSpaceOnUse"><stop stop-color="#55DCFA"/><stop offset=".48" stop-color="#239CF5"/><stop offset="1" stop-color="#3269E6"/></linearGradient>
+  <linearGradient id="shine" x1="128" y1="9" x2="128" y2="125" gradientUnits="userSpaceOnUse"><stop stop-color="white" stop-opacity=".34"/><stop offset="1" stop-color="white" stop-opacity="0"/></linearGradient>
+ </defs>
+ <rect x="4" y="4" width="248" height="248" rx="58" fill="url(#tile)"/>
+ <rect x="6" y="6" width="244" height="244" rx="56" stroke="white" stroke-opacity=".24" stroke-width="2"/>
+ <path d="M62 9h132a53 53 0 0 1 53 53v60C173 151 83 132 9 176V62A53 53 0 0 1 62 9Z" fill="url(#shine)"/>
+ <path d="M87 72a65 65 0 1 0 82 0 M128 53v65" stroke="#FFF" stroke-width="17" stroke-linecap="round"/>
+ <circle cx="183" cy="184" r="40" fill="#247FEF"/>
+ <circle cx="183" cy="184" r="31" fill="#F5FCFF"/>
+ <path d="M183 165v19l13 8" stroke="#2687EF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

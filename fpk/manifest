@@ -1,10 +1,10 @@
 appname=fnos-power-scheduler
-version=0.1.0
+version=0.1.4
 display_name=电源计划
 desc=为飞牛 fnOS 提供定时关机与 RTC 开机计划，支持单次、每天和每周规则，以及执行记录。
 source=thirdparty
 platform=x86
-maintainer=fnos-power-scheduler contributors
+maintainer=Simlym
 maintainer_url=https://github.com/Simlym/fnos-power-scheduler
 distributor=Simlym
 distributor_url=https://github.com/Simlym/fnos-power-scheduler

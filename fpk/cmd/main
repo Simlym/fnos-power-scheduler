@@ -8,7 +8,12 @@ POWER_PID="$RUNTIME/power.pid"
 POWER_SOCKET="$RUNTIME/power.sock"
 SERVER_SOCKET="${TRIM_APPDEST}/app.sock"
 
-error() { printf '%s\n' "$*" > "$TRIM_TEMP_LOGFILE"; exit 1; }
+error() {
+ printf '%s\n' "$*" >&2
+ printf '%s\n' "$*" >> "$RUNTIME/startup.log"
+ if [ -n "${TRIM_TEMP_LOGFILE:-}" ]; then printf '%s\n' "$*" > "$TRIM_TEMP_LOGFILE"; fi
+ exit 1
+}
 
 # Only signal a live process when its executable matches this application.
 running() {
@@ -41,7 +46,9 @@ case "${1:-}" in
   stop_process "$POWER_PID" "$POWER_EXE"
   # Paths are fixed app-owned sockets; never remove arbitrary directories.
   rm -f -- "$SERVER_SOCKET" "$POWER_SOCKET"
-  install -d -m 0700 -o "$TRIM_USERNAME" -g "$TRIM_GROUPNAME" "$TRIM_PKGVAR"
+  if ! bash "$(dirname -- "$0")/prepare_data" "$TRIM_PKGVAR" "$TRIM_USERNAME" "$TRIM_GROUPNAME" >> "$RUNTIME/startup.log" 2>&1; then
+   error "应用数据目录或数据库权限检查失败，请检查 /run/fnos-power-scheduler/startup.log"
+  fi
   uid=$(id -u "$TRIM_USERNAME")
   "$POWER_EXE" --uid "$uid" >> "$RUNTIME/power.log" 2>&1 &
   printf '%s\n' "$!" > "$POWER_PID"

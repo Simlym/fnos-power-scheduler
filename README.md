@@ -2,7 +2,7 @@
 
 面向飞牛 fnOS x86_64 的原生电源计划应用：定时关机、RTC 定时开机、可取消倒计时和执行记录。
 
-当前是 **0.1.0 开发版**。已经实现本地模拟运行及 Linux 构建；飞牛安装、网关进程身份、RTC 和真实关机仍需实机验收。不是已经通过应用中心审核的版本。
+当前是 **0.1.4 开发版**。已经实现本地模拟运行及 Linux 构建；用户已在设备上验证关机与 RTC 唤醒，其他设备及系统版本仍需分别验收。不是已经通过应用中心审核的版本。
 
 ## 功能
 
@@ -80,6 +80,10 @@ python3 scripts/fpk.py verify dist/fnos-power-scheduler.fpk
 RTC 所有权记录位于 `/var/lib/fnos-power-scheduler/owned-alarm`，仅 root 可写，跨重启保留。RTC 默认使用 `/sys/class/rtc/rtc0/wakealarm`。安装包当前固定使用 rtc0；多 RTC 设备需在实机探测后调整。
 
 正常关机使用 `/usr/bin/systemctl --no-block poweroff`，不强制断电。前端“已请求”表示请求已提交，不代表已经验证整机断电。
+
+### 重装后的数据权限
+
+启动时会重新设置应用数据目录及 scheduler.db、WAL/SHM/journal 文件的归属与权限，兼容卸载保留数据后应用用户 UID 发生变化的情况，不删除数据库。权限检查失败会写入 /run/fnos-power-scheduler/startup.log；数据库初始化失败的 server.log 会包含实际路径。
 
 ### 停止与卸载
 
