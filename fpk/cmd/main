@@ -70,7 +70,7 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=$POWER_EXE boot
 ExecStop=$POWER_EXE reconcile
-TimeoutStartSec=90
+TimeoutStartSec=120
 TimeoutStopSec=15
 UMask=0077
 [Install]

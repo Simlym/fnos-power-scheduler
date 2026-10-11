@@ -10,6 +10,11 @@
 - `powerd reconcile`：更新最近一次 RTC 唤醒；在开机规则到点、正常系统关机时执行。
 - `fnps-rust-lifecycle.service`：启动时恢复计划，退出时刷新 RTC，oneshot 的 active(exited) 状态不表示有进程常驻。
 
+开机恢复保留挂载依赖，并对数据库暂时不可访问或锁定最多等待 60 秒；就绪后立即恢复计划，不依赖网页后台稍后启动。
+等待只覆盖数据库打开与初始化，超时明确失败，数据库损坏等非暂时错误直接报告，不反复执行 timer/RTC 应用操作。
+首次安装及应用启动时，在数据目录准备和权限修复后初始化数据库；开机恢复及其他电源操作只打开已有数据库，防止数据卷未就绪时误建空库。
+生命周期服务启动超时为 120 秒，为数据库等待和后续计划恢复留出时间，关机超时仍为 15 秒。
+
 网页后台按需启动暂不实现。关闭浏览器后只保留 Rust server；systemd 管理监听接口和 timer，没有常驻 powerd。
 页面打开期间每两秒查询一次，每次查询会短暂启动一个 control 进程。
 
@@ -25,6 +30,7 @@ timer 使用 Persistent=false，执行程序另外校验任务是否仍启用、
 夏令时不存在的本地分钟跳过；重复分钟按本地时间的 occurrence key 去重。
 
 当前 RTC 后端支持 UTC 硬件时钟。检测到 /etc/adjtime 的 LOCAL 时拒绝写入并报告错误，避免出现时区偏移；尚未实现 LOCAL 兼容。
+实测部分主板的 BIOS 固定 S5 RTC 闹钟会干扰 Linux 闹钟；Cloudstar ITX-C246 本次实机对照中，关闭 BIOS 的 Resume On RTC Alarm 后，Linux 和应用均成功关机唤醒。其他主板需单独验证。
 RTC 不存在、被其他程序占用、读回不一致或下一次唤醒距离实际关机不足两分钟，均取消计划关机。
 系统启动及启动应用后的两分钟跳过关机。倒计时内系统时间跳变超过三秒取消本次关机。
 
@@ -72,11 +78,14 @@ ps -p "$(cat /run/fnos-power-scheduler/server.pid)" -o pid,user,rss,%cpu,args
 pgrep -af '[p]owerd'
 systemctl list-timers --all 'fnps-rust-plan-*'
 systemctl status fnps-rust-control.socket fnps-rust-lifecycle.service
+journalctl -b -u fnps-rust-lifecycle.service --no-pager
 journalctl -u 'fnps-rust-control@*' -u 'fnps-rust-plan-*' --since '10 minutes ago'
 cat /sys/class/rtc/rtc0/wakealarm
 ```
 
 关闭页面后 powerd 应不存在；server 保持运行。页面刷新期间短暂出现 powerd 是正常情况。
+冷启动后检查生命周期日志：数据就绪较晚时应先出现“尚未就绪”，随后“已就绪”及服务启动成功；等待超时或数据库损坏仍应明确失败，不能创建空数据库或删除已有计划。
+2026-10-11 在 Cloudstar ITX-C246、fnOS 内核 6.18.18.c1107-trim 实机验证：应用计划关机和 RTC 开机成功；更新后启动恢复进程在数据库不可用时等待 12 秒，同一进程继续恢复 timer，生命周期服务首次启动成功。
 用一次关机倒计时取消和一次真实关机/RTC 唤醒测试，再验证两组以上开关机以及重启后计划恢复。
 确认停止应用后 timer 仍存在、禁用规则后 timer 删除、卸载后无遗留 timer。
 Unix Socket 激活、应用生命周期和真实 RTC 唤醒仍需在目标 fnOS 实测，本地自动测试不能代替实机验收。

@@ -3,7 +3,7 @@ use crate::{
     schedule::{Task, conflict},
 };
 use chrono::{DateTime, Duration, Utc};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, ErrorCode, OpenFlags, params};
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -12,9 +12,80 @@ pub struct Store {
 }
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
-        let db = Connection::open(path)
-            .map_err(|e| format!("初始化数据库 {} 失败：{e}", path.display()))?;
-        db.busy_timeout(std::time::Duration::from_secs(8))?;
+        Self::open_with_flags(
+            path,
+            OpenFlags::default(),
+            std::time::Duration::from_secs(8),
+        )
+        .map_err(|e| format!("初始化数据库 {} 失败：{e}", path.display()).into())
+    }
+    pub fn open_existing(path: &Path) -> Result<Self> {
+        Self::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            std::time::Duration::from_secs(8),
+        )
+        .map_err(|e| format!("打开数据库 {} 失败：{e}", path.display()).into())
+    }
+    pub fn open_for_boot(path: &Path, timeout: std::time::Duration) -> Result<Self> {
+        use std::time::{Duration, Instant};
+        let started = Instant::now();
+        let mut waiting = false;
+        loop {
+            // A missing mount must never be mistaken for a new installation.
+            // Creation is only allowed after the package prepares its data directory.
+            let remaining = timeout.saturating_sub(started.elapsed());
+            let result = Self::open_with_flags(
+                path,
+                OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+                remaining.min(Duration::from_secs(8)),
+            );
+            match result {
+                Ok(store) => {
+                    if waiting {
+                        eprintln!(
+                            "应用数据库已就绪，等待 {:.1} 秒，继续恢复计划",
+                            started.elapsed().as_secs_f64()
+                        );
+                    }
+                    store.db.busy_timeout(Duration::from_secs(8))?;
+                    return Ok(store);
+                }
+                Err(e) => {
+                    let transient = matches!(&e, rusqlite::Error::SqliteFailure(error, _)
+                        if matches!(error.code, ErrorCode::CannotOpen | ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked | ErrorCode::SystemIoFailure));
+                    if !transient {
+                        return Err(format!("开机恢复数据库 {} 失败：{e}", path.display()).into());
+                    }
+                    let remaining = timeout.saturating_sub(started.elapsed());
+                    if remaining.is_zero() {
+                        return Err(format!(
+                            "等待应用数据库 {} 就绪超时（{:.1} 秒）：{e}",
+                            path.display(),
+                            timeout.as_secs_f64()
+                        )
+                        .into());
+                    }
+                    if !waiting {
+                        eprintln!(
+                            "应用数据库 {} 尚未就绪，最多等待 {:.0} 秒：{e}",
+                            path.display(),
+                            timeout.as_secs_f64()
+                        );
+                        waiting = true;
+                    }
+                    std::thread::sleep(remaining.min(Duration::from_secs(1)));
+                }
+            }
+        }
+    }
+    fn open_with_flags(
+        path: &Path,
+        flags: OpenFlags,
+        busy_timeout: std::time::Duration,
+    ) -> rusqlite::Result<Self> {
+        let db = Connection::open_with_flags(path, flags)?;
+        db.busy_timeout(busy_timeout)?;
         db.execute_batch("PRAGMA journal_mode=WAL;")?;
         // Control requests open a fresh connection. Do not acquire a schema write
         // lock on every status read while another process is applying timers.
@@ -235,6 +306,87 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn boot_waits_for_data_directory_and_preserves_saved_plans() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("volume").join("scheduler.db");
+        let prepared = path.clone();
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::fs::create_dir(prepared.parent().unwrap()).unwrap();
+            let store = Store::open(&prepared).unwrap();
+            let (_, mut task, now) = setup();
+            task.id.clear();
+            store.save(task, now).unwrap();
+        });
+        let store = Store::open_for_boot(&path, std::time::Duration::from_secs(3)).unwrap();
+        writer.join().unwrap();
+        assert_eq!(store.tasks().unwrap().len(), 1);
+        assert_eq!(store.tasks().unwrap()[0].time, "23:00");
+    }
+    #[test]
+    fn missing_database_times_out_without_creating_an_empty_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scheduler.db");
+        assert!(Store::open_existing(&path).is_err());
+        let error = Store::open_for_boot(&path, std::time::Duration::from_millis(30))
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(error.contains("超时"));
+        assert!(!path.exists());
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+    #[test]
+    fn corrupt_database_is_not_retried_or_replaced() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scheduler.db");
+        let contents = b"this is not a SQLite database";
+        std::fs::write(&path, contents).unwrap();
+        let started = std::time::Instant::now();
+        let error = Store::open_for_boot(&path, std::time::Duration::from_secs(3))
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(error.contains("失败"));
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert_eq!(std::fs::read(&path).unwrap(), contents);
+    }
+    #[test]
+    fn boot_waits_for_database_lock_to_be_released() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scheduler.db");
+        let writer = Connection::open(&path).unwrap();
+        writer.execute_batch("CREATE TABLE saved(value TEXT); INSERT INTO saved VALUES('keep'); BEGIN EXCLUSIVE;").unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            writer.execute_batch("COMMIT").unwrap();
+        });
+        let store = Store::open_for_boot(&path, std::time::Duration::from_secs(3)).unwrap();
+        release.join().unwrap();
+        let saved: String = store
+            .db
+            .query_row("SELECT value FROM saved", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(saved, "keep");
+    }
+    #[test]
+    fn boot_lock_wait_is_limited_by_the_startup_deadline() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scheduler.db");
+        let writer = Connection::open(&path).unwrap();
+        writer
+            .execute_batch("CREATE TABLE saved(value TEXT); BEGIN EXCLUSIVE;")
+            .unwrap();
+        let started = std::time::Instant::now();
+        let error = Store::open_for_boot(&path, std::time::Duration::from_millis(50))
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(error.contains("超时"));
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        writer.execute_batch("ROLLBACK").unwrap();
+    }
     #[test]
     fn status_stays_readable_while_plans_are_applying() {
         let dir = tempfile::tempdir().unwrap();

@@ -31,6 +31,9 @@ mod linux {
             if uid == 0 {
                 return Err("应用用户不能是 root".into());
             }
+            // The package has prepared this directory; only installation/application
+            // startup may create a database, never early boot or shutdown recovery.
+            Store::open(&data.join("scheduler.db"))?;
             return system::atomic_write(
                 Path::new(system::CONFIG),
                 &serde_json::to_vec(&Config { data, uid })?,
@@ -41,7 +44,12 @@ mod linux {
             return Rtc::default().cleanup();
         }
         let config: Config = serde_json::from_slice(&fs::read(system::CONFIG)?)?;
-        let store = Store::open(&config.data.join("scheduler.db"))?;
+        let database = config.data.join("scheduler.db");
+        let store = if mode == "boot" {
+            Store::open_for_boot(&database, std::time::Duration::from_secs(60))?
+        } else {
+            Store::open_existing(&database)?
+        };
         match mode {
             "control" => control(&store, config.uid),
             "init" | "boot" => {
