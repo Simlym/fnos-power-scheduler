@@ -1,79 +1,109 @@
 # fnos-power-scheduler · 电源计划
 
-面向飞牛 fnOS x86_64 的电源计划应用，当前版本为 **0.2.1 开发版**。使用 Rust、Vue 和 SQLite，通过 systemd timer 调度关机，通过 RTC 硬件闹钟定时开机。
+为飞牛 fnOS 提供定时关机与 RTC 定时开机的应用，支持单次、每天和每周计划，以及一天内多组开关机安排。计划和执行记录保存在本机，关机由 systemd timer 调度，开机由设备的 RTC 硬件闹钟触发。
 
-## 功能
+## 下载与安装
 
-- 支持单次、每天、每周计划，每天可安排多组开关机。
-- 总览固定展示周一至周日，按时间顺序显示开关机，单次计划按日期另列。
-- 提示连续开关机、重复时间、同时间开关机以及关机后五分钟内开机的安排；提示可展开，不阻止保存。重复计划与单次计划分别检查，同一时区内比较。
-- 下一次开关机时间包含日期、星期和时间，界面采用紧凑布局。
-- 关机前 60 秒倒计时，可取消本次关机；启动保护、任务去重、错过关机不补执行。
-- 每项计划保存 IANA 时区；执行记录和计划保存在 SQLite 中。
-- 关机前写入并读回 RTC，不覆盖其他程序拥有的闹钟；应用计划失败时显示原因。
+1. 在 [GitHub Releases](https://github.com/Simlym/fnos-power-scheduler/releases) 下载 `fnos-power-scheduler.fpk`，也可使用[最新正式版固定下载链接](https://github.com/Simlym/fnos-power-scheduler/releases/latest/download/fnos-power-scheduler.fpk)。
+2. 通过飞牛应用管理的手动安装入口安装 FPK；更新前先备份应用数据。
+3. 打开「电源计划」，添加并保存计划，检查应用结果及下一次开关机时间。
+4. 首次使用先验证关机倒计时取消，再在设备上测试真实关机与 RTC 开机。
 
-**关闭页面或停止应用后，已应用的计划仍会执行。** 停止应用会取消当前关机倒计时；需要暂停时先禁用计划。卸载会清理本应用 timer 和仍归本应用所有的 RTC 闹钟。
+每个发布版本附带 `fnos-power-scheduler.fpk.sha256` 校验文件。请下载 FPK 附件安装；GitHub 自动生成的 Source code 压缩包是源码。
 
-RTC 后端支持 UTC 硬件时钟，检测到 `/etc/adjtime` 的 `LOCAL` 配置时拒绝写入。尚未自动检测备份、存储维护及 Docker 工作负载，计划时间需避开繁忙时段。不同设备的 RTC 唤醒能力应分别测试。
+### 适用条件
+
+- 当前安装包面向 **fnOS x86_64**，声明的最低系统版本为 **1.1.3100**。
+- 定时开机需要主板和固件支持关机状态下的 RTC 唤醒，不同设备需分别测试。
+- 当前支持 UTC 硬件时钟；检测到 `/etc/adjtime` 为 `LOCAL` 时拒绝写入并显示错误。
+- 项目仍在开发阶段，尚未通过飞牛应用中心审核；GitHub 发布不等于应用中心上架。
+
+## 功能与使用
+
+- **灵活计划**：单次、每天、每周规则；每项计划独立保存 IANA 时区。
+- **计划总览**：按周一至周日和时间顺序展示周期计划，单次计划按日期另列；显示下一次开关机的日期、星期和时间。
+- **安排提示**：提示重复时间、连续开关机、同时间开关机及关机后五分钟内开机等情况，提示不阻止保存。周期与单次计划分别检查，同一时区内比较。
+- **关机保护**：关机前 60 秒倒计时，可取消本次关机；提供启动保护和任务去重，错过关机不会补执行。
+- **执行反馈**：保存计划和执行记录，显示系统应用失败的原因；关机前写入并读回 RTC，不覆盖其他程序拥有的闹钟。
+
+**关闭页面或停止应用后，已应用的计划仍会执行。** 停止应用会取消当前关机倒计时；需要暂停自动开关机时，应先禁用全部计划。卸载会清理本应用 timer，以及仍归本应用所有的 RTC 闹钟。
+
+应用尚未自动检测备份、存储维护及 Docker 工作负载，请将关机时间安排在设备空闲时段。设备检查、调度细节及实机验收见[开发与运行说明](docs/development.md)。
 
 ## 本地开发
 
-需要 Rust 1.96+、Node.js 22.12+ 和 Python 3.9+。
+需要 Rust 1.96+、Node.js 22.12+ 和 Python 3.11+（版本检查使用标准库 `tomllib`）。后端使用 Rust，前端使用 Vue，数据使用 SQLite。
 
-```powershell
+在项目根目录执行，Windows、Linux 和 macOS 均可用于本地模拟开发：
+
+```sh
 npm --prefix web ci
 npm --prefix web run build
 cargo test --locked
-.\scripts\dev.ps1
+python scripts/check_version.py
+python -m unittest discover -s scripts -p 'test_*.py'
+cargo run --locked --bin server
 ```
 
-打开 `http://127.0.0.1:8787`。模拟模式不安装系统 timer，不修改 RTC，不执行关机。调试前端时可另开终端运行 `npm --prefix web run dev`，Vite 会代理后台 API。
+若系统的 Python 命令为 `python3`，请相应替换。打开 `http://127.0.0.1:8787`；模拟模式不安装系统 timer、不修改 RTC、不执行关机。调试前端时可另开终端运行 `npm --prefix web run dev`，Vite 会代理后台 API。
 
-## 构建安装包
+## 构建飞牛安装包
 
-打包使用 fnpack 1.2.3。Windows 交叉编译还需 Zig 0.14.1。
+构建目标为 Linux x86_64，打包使用 fnpack 1.2.3。设备本身不需要安装开发工具。
+
+### Linux
+
+准备上述开发工具、`musl-gcc` 和 fnpack，将 fnpack 放入 PATH，然后执行：
+
+```sh
+rustup target add x86_64-unknown-linux-musl
+CC_x86_64_unknown_linux_musl=musl-gcc \
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
+bash scripts/build.sh
+```
+
+### Windows
+
+另外准备 Zig 0.14.1 和 Windows 版 fnpack，将工具路径替换为本机位置：
 
 ```powershell
 rustup target add x86_64-unknown-linux-musl
-.\scripts\build.ps1 -ZigPath C:\tools\zig\zig.exe
+.\scripts\build.ps1 -ZigPath '路径\zig.exe' -FnpackPath '路径\fnpack.exe'
 ```
 
-脚本也会寻找 `work/zig-sdk/ziglang/zig.exe`。安装包为 `dist/fnos-power-scheduler.fpk`，旁边生成 SHA256 校验文件。Linux 构建、运行机制及设备检查命令见 [开发与运行说明](docs/development.md)。
+两种方式都会生成 `dist/fnos-power-scheduler.fpk` 和同名 `.sha256` 文件。可进一步检查安装包结构、Linux x86_64 程序、脚本换行和执行权限：
 
-```powershell
+```sh
 python scripts/fpk.py verify dist/fnos-power-scheduler.fpk
-python -m unittest discover -s scripts -p test_fpk.py
 ```
-
-打包校验检查安装包结构、Linux x86_64 程序、脚本换行和执行权限。
-
-## 安装与运行
-
-安装包下载：[GitHub Releases](https://github.com/Simlym/fnos-power-scheduler/releases)。正式版的最新安装包可通过[固定下载链接](https://github.com/Simlym/fnos-power-scheduler/releases/latest/download/fnos-power-scheduler.fpk)获取；预发布版本在 Releases 列表单独展示。每个版本附带 SHA256 校验文件。
-
-通过飞牛应用管理手动安装 FPK。更新前备份应用数据。
-
-网页通过飞牛网关 Unix Socket 提供服务，验证网关对端 UID、管理员身份和操作校验 Header。网页由普通应用用户运行，电源程序位于独立的 root 所有目录，由系统按需启动。
-
-项目处于开发阶段，尚未通过应用中心审核。最低系统版本声明为 `1.1.3100`，具体设备兼容性以实测为准；许可证尚待确定。
 
 ## GitHub 自动构建与发布
 
-提交到 `main`、向 `main` 提交 PR 或在 Actions 页面手动运行 `Build and release` 时，会校验版本、运行 Python 和 Rust 测试、构建前端及 Linux x86_64 程序，并验证 FPK。成功的安装包和 SHA256 文件保存在该次运行的 Artifacts 中，保留 14 天。
+| 触发方式 | 构建结果 | 是否发布 Release |
+| --- | --- | --- |
+| 提交到 `main`、向 `main` 提交 PR | 测试、构建、验证 FPK；产物保存在 Actions 的 Artifacts 中，保留 14 天 | 否 |
+| 在 Actions 手动运行 `Build and release` | 同上 | 否 |
+| 推送与项目版本一致的 `v*` 标签 | 同上；自动创建 Release 并上传 FPK 和 SHA256 文件 | 是 |
 
-推送 `v*` 版本标签时，构建成功后自动创建 GitHub Release，并上传安装包和校验文件。仅发布任务拥有 `contents: write` 权限，不需要配置个人访问令牌。构建工具版本固定，fnpack 下载后校验 SHA256，GitHub Actions 使用固定提交并由 Dependabot 检查更新。
+**无需手工把安装包上传到标签。** 推送版本标签后，等待 `Build and release` 成功，安装包会自动出现在对应 Release 的 Assets 下载区。发布使用 GitHub 提供的令牌，无需另配个人访问令牌。
 
-发布前同步 `Cargo.toml`、`fpk/manifest`、`web/package.json`、`web/package-lock.json` 的版本（包括 lock 文件根包版本），并更新 README 和开发说明中的版本描述。标签必须与版本完全一致。例如版本为 `0.2.1` 时：
+发布前同步 `Cargo.toml`、`Cargo.lock` 中的项目版本、`fpk/manifest`、`web/package.json` 和 `web/package-lock.json`（包括根包版本）。先提交版本变更，再发布与版本完全一致的标签。例如下一版本为 `0.2.3` 时：
 
-```bash
-python scripts/check_version.py --tag v0.2.1
+```sh
+python scripts/check_version.py --tag v0.2.3
 git push origin main
-git tag -a v0.2.1 -m "Release 0.2.1"
-git push origin v0.2.1
+git tag -a v0.2.3 -m "Release 0.2.3"
+git push origin v0.2.3
 ```
 
-版本包含后缀（例如 `0.2.2-rc.1`）时，标签为 `v0.2.2-rc.1`，自动标记为预发布且不更新 latest 下载链接。首次发布前在仓库 Settings → Actions → General 确认允许 GitHub Actions 运行。
+带后缀的版本（如 `0.2.3-rc.1`）会标记为预发布，不更新最新正式版固定下载链接。构建失败不会发布；修复后发布新版本标签，或在尚未创建 Release 时重新运行失败任务。已有 Release 不会被自动覆盖。
 
-失败的构建不会发布。修复后发布新的版本标签；若构建失败且尚未创建 Release，可以在 Actions 页面重新运行失败任务。已有 Release 不会被自动覆盖。手动运行工作流只生成构建产物，不发布 Release。
+正式发布前需确认仓库允许 GitHub Actions 运行。自动构建不能代替目标设备上的真实关机及 RTC 唤醒测试。
 
-发布到 GitHub 不代表飞牛应用中心上架。真实关机和 RTC 唤醒仍需按[飞牛验收流程](docs/development.md#飞牛验收)在设备上测试。
+## 更多说明
+
+- [开发、权限模型、调度机制与设备验收](docs/development.md)
+- [版本下载与更新记录](https://github.com/Simlym/fnos-power-scheduler/releases)
+- [问题反馈](https://github.com/Simlym/fnos-power-scheduler/issues)
+
+许可证尚待确定。

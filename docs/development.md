@@ -1,6 +1,6 @@
 # 开发与运行说明
 
-后端使用 Rust，界面使用 Vue，SQLite 保存计划、执行记录和执行去重信息。当前版本为 0.2.1 开发版。
+后端使用 Rust，界面使用 Vue，SQLite 保存计划、执行记录和执行去重信息。发布版本见 GitHub Releases。
 
 ## 运行方式
 
@@ -46,7 +46,7 @@ root 可执行文件仍复制到 /usr/local/libexec/fnos-power-scheduler，不�
 
 ## 构建
 
-Windows：Rust 1.96+、Node.js 22.12+、Python 3.9+、fnpack 1.2.3、Zig 0.14.1。
+Windows：Rust 1.96+、Node.js 22.12+、Python 3.11+、fnpack 1.2.3、Zig 0.14.1。
 
 ```powershell
 rustup target add x86_64-unknown-linux-musl
