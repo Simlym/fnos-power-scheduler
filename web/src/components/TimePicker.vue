@@ -8,7 +8,7 @@ const root = ref<HTMLElement>()
 const trigger = ref<HTMLButtonElement>()
 const hours = Array.from({ length: 24 }, (_, n) => String(n).padStart(2, '0'))
 const minutes = Array.from({ length: 60 }, (_, n) => String(n).padStart(2, '0'))
-const parts = computed(() => model.value.split(':'))
+const parts = computed(() => /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(model.value) ? model.value.split(':') : ['23', '00'])
 
 async function toggle() {
   open.value = !open.value
@@ -59,9 +59,10 @@ onUnmounted(() => document.removeEventListener('pointerdown', outside))
 
 <template>
   <div ref="root" class="time-picker" @focusout="focusOut" @keydown.esc.stop.prevent="close">
-    <button ref="trigger" type="button" class="time-trigger" aria-label="执行时间" aria-haspopup="dialog" :aria-expanded="open" @click="toggle">
-      <span>{{ model }}</span><UiIcon name="clock" />
-    </button>
+    <div class="picker-input">
+      <input v-model="model" aria-label="执行时间" placeholder="HH:mm" required pattern="([01][0-9]|2[0-3]):[0-5][0-9]" title="请输入 24 小时制时间，例如 09:30" maxlength="5" @focus="open = false">
+      <button ref="trigger" type="button" class="picker-toggle" aria-label="选择执行时间" aria-haspopup="dialog" :aria-expanded="open" @click="toggle"><UiIcon name="clock" /></button>
+    </div>
     <div v-if="open" class="time-popover" role="dialog" aria-label="选择执行时间">
       <div class="time-columns">
         <div v-for="(values, column) in [hours, minutes]" :key="column" class="time-column">

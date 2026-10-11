@@ -3,6 +3,23 @@
 .schedule-overview{padding:10px 14px}.schedule-heading{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin-bottom:7px}.schedule-heading h2{font-size:14px;font-weight:600;margin:0}.schedule-heading p{font-size:12px} .timeline-table{border:1px solid #e1e5eb;border-radius:7px;overflow:hidden}.timeline-table-heading,.timeline-row{display:grid;grid-template-columns:140px minmax(0,1fr);align-items:center;gap:12px;padding:5px 10px}.timeline-table-heading{background:#f7f9fc;color:#7c8797;font-size:12px;padding-top:6px;padding-bottom:6px}.timeline-row{border-top:1px solid #e9edf2;min-height:36px}.timeline-day{min-width:0}.timeline-day strong{font-size:13px;font-weight:500;overflow-wrap:anywhere}.timeline-day small{display:block;color:#8b96a5;font-size:10px;margin-top:3px;overflow-wrap:anywhere}.timeline-events{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin:0;padding:0;list-style:none;min-width:0}.timeline-events li{display:flex;align-items:center;gap:10px;max-width:100%}.timeline-arrow{color:#a4afbd;font-size:14px}.timeline-event{display:inline-flex;align-items:center;gap:8px;border:1px solid #d7e8fb;border-radius:6px;padding:3px 8px;background:#f0f7ff;color:#2469ae;font-size:12px;white-space:nowrap}.timeline-event time{font-variant-numeric:tabular-nums;font-weight:600}.timeline-action{font-size:11px}.timeline-event.shutdown{background:#fff6ec;border-color:#f3e1cd;color:#9c5e21}.no-schedule{color:#a4adba}.once-heading{margin-top:16px}.overview-empty{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:16px}.overview-empty button{font-size:12px;flex-shrink:0}
 @media(max-width:600px){.schedule-overview{padding:12px}.timeline-table-heading,.timeline-row{grid-template-columns:1fr;gap:8px;padding:10px}.timeline-table-heading{display:none}.timeline-row:first-child{border-top:0}.timeline-day strong{font-size:12px}.timeline-events{gap:7px}.timeline-events li{gap:7px}.timeline-event{padding:4px 7px}.overview-empty{align-items:flex-start;flex-direction:column}.tabs{gap:20px;padding:0 12px}}
 .time-picker{position:relative;min-width:0}
+.date-picker{position:relative;min-width:0}
+.picker-input{position:relative}
+.picker-input input{padding-right:42px;font-variant-numeric:tabular-nums}
+.picker-toggle{position:absolute;right:4px;top:4px;bottom:4px;width:32px;padding:6px;border:0;background:transparent;color:#8694a5}
+.picker-toggle .ui-icon{width:17px;height:17px}
+.picker-toggle:focus-visible{outline:2px solid #acd0f7;outline-offset:0}
+.date-popover{position:absolute;top:calc(100% + 6px);left:0;z-index:2;width:280px;max-width:100%;padding:10px;background:white;border:1px solid #dce2ea;border-radius:9px;box-shadow:0 8px 24px #2532471a}
+.calendar-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.calendar-heading strong{font-size:13px;color:#34445b}
+.calendar-heading button{border:0;padding:3px 10px;font-size:20px}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.calendar-grid>span{text-align:center;padding:6px 0;color:#8694a5;font-size:11px}
+.calendar-grid button{border:0;padding:7px 0;font-size:12px;min-width:0}
+.calendar-grid button.muted{color:#a4adba}
+.calendar-grid button[aria-current="date"]{box-shadow:inset 0 0 0 1px #acd0f7}
+.calendar-grid button.selected{background:#2585ed;color:white;font-weight:600}
+.calendar-grid button:focus-visible{outline:2px solid #acd0f7;outline-offset:0}
 .time-trigger{width:100%;justify-content:space-between;border:1px solid #dce2ea;border-radius:6px;padding:9px 11px;color:#34445b;background:white;font-variant-numeric:tabular-nums}
 .time-trigger .ui-icon{width:16px;height:16px;color:#8694a5}
 .time-trigger:hover{background:white;border-color:#acd0f7}

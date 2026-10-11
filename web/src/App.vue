@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import UiIcon from './components/UiIcon.vue'
 import TimePicker from './components/TimePicker.vue'
+import DatePicker from './components/DatePicker.vue'
 import { version } from '../package.json'
 type Task = {id:string;name:string;action:'wake'|'shutdown';repeat:'once'|'daily'|'weekly';time:string;date:string;weekdays:number[];timezone:string;enabled:boolean}
 type RecordItem = {taskId:string;name:string;at:string;status:string;message:string}
@@ -12,6 +13,13 @@ let stateRevision=0, refreshSequence=0
 const weekdays=[{n:1,label:'一'},{n:2,label:'二'},{n:3,label:'三'},{n:4,label:'四'},{n:5,label:'五'},{n:6,label:'六'},{n:0,label:'日'}]
 const empty=():Task=>({id:'',name:'',action:'shutdown',repeat:'weekly',time:'23:00',date:'',weekdays:[1,2,3,4,5],timezone:Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',enabled:true})
 const draft=ref<Task>(empty())
+watch(() => draft.value.repeat, repeat => {
+ if (repeat === 'once' && !draft.value.date) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: draft.value.timezone || 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  const part = (type: string) => parts.find(p => p.type === type)!.value
+  draft.value.date = part('year') + '-' + part('month') + '-' + part('day')
+ }
+})
 const apiBase=location.pathname.startsWith('/app/fnos-power-scheduler')?'/app/fnos-power-scheduler/':''
 async function request(path:string,method='GET',body?:unknown){const response=await fetch(apiBase+'api/'+path,{method,signal:method==='GET'?AbortSignal.timeout(12000):undefined,headers:{'Content-Type':'application/json','X-Power-Scheduler':'1'},body:body===undefined?undefined:JSON.stringify(body)});if(!response.ok){let message=await response.text();try{message=JSON.parse(message).error||message}catch{}throw new Error(message)}return response.json()}
 async function refresh(){
@@ -136,6 +144,6 @@ onMounted(poll);onUnmounted(()=>{stopped=true;if(timer)clearTimeout(timer)})
    <template v-else><div v-if="!state?.records.length" class="empty"><h3>还没有执行记录</h3><p>计划到期后，会在这里显示倒计时、取消或请求结果。</p></div><div v-for="(record,i) in state?.records" :key="i" class="record-row"><span class="record-status" :class="record.status">{{labels[record.status]||record.status}}</span><div><strong>{{record.name}}</strong><p>{{record.message}}</p></div><time>{{format(record.at)}}</time></div></template>
   </section>
   <footer><span class="status-dot" :class="{bad:!state?.power.available}"></span><span>{{state?.power.message||'正在读取设备状态'}}</span><details class="usage-help"><summary>使用说明</summary><div><p>关闭页面或停止应用后，已应用的计划仍会执行。需要暂停时，请先禁用计划；停止应用会取消当前关机倒计时。</p><p>关机前有 60 秒倒计时，时间按计划设置的时区执行。</p><p>提醒仅依据已启用计划；手动开关机不在检查范围内。重复计划与单次计划分别检查，同一时区内比较。</p></div></details><span class="footer-time">v{{version}}</span></footer>
-  <div v-if="editor" class="overlay" @click.self="!busy&&(editor=false)"><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="editor-title"><div class="dialog-heading"><h2 id="editor-title">{{draft.id?'编辑计划':'新建计划'}}</h2><button class="quiet" :disabled="busy" @click="editor=false" aria-label="关闭"><UiIcon name="close" /></button></div><form @submit.prevent="save"><label>计划名称<input v-model="draft.name" required maxlength="40" placeholder="例如：工作日晚间关机"></label><div class="form-grid"><label>电源操作<select v-model="draft.action"><option value="shutdown">关机</option><option value="wake">开机</option></select></label><div class="time-field"><span>执行时间</span><TimePicker v-model="draft.time" /></div></div><label>重复方式<select v-model="draft.repeat"><option value="weekly">每周指定日期</option><option value="daily">每天</option><option value="once">仅执行一次</option></select></label><fieldset v-if="draft.repeat==='weekly'"><legend>星期</legend><div class="days"><label v-for="day in weekdays" :key="day.n"><input type="checkbox" v-model="draft.weekdays" :value="day.n"><span>{{day.label}}</span></label></div></fieldset><label v-if="draft.repeat==='once'">执行日期<input type="date" v-model="draft.date" required></label><label>时区<input v-model="draft.timezone" required placeholder="Asia/Shanghai"></label><p class="form-note">关机前会有 60 秒倒计时。错过的关机不会补执行；开机计划需要设备支持 RTC 唤醒。</p><div v-if="error" class="notice danger">{{error}}</div><div class="dialog-actions"><button type="button" :disabled="busy" @click="editor=false">取消</button><button class="primary" :disabled="busy" type="submit">{{busy?'保存中…':'保存计划'}}</button></div></form></section></div>
+  <div v-if="editor" class="overlay" @click.self="!busy&&(editor=false)"><section class="dialog" role="dialog" aria-modal="true" aria-labelledby="editor-title"><div class="dialog-heading"><h2 id="editor-title">{{draft.id?'编辑计划':'新建计划'}}</h2><button class="quiet" :disabled="busy" @click="editor=false" aria-label="关闭"><UiIcon name="close" /></button></div><form @submit.prevent="save"><label>计划名称<input v-model="draft.name" required maxlength="40" placeholder="例如：工作日晚间关机"></label><div class="form-grid"><label>电源操作<select v-model="draft.action"><option value="shutdown">关机</option><option value="wake">开机</option></select></label><div class="time-field"><span>执行时间</span><TimePicker v-model="draft.time" /></div></div><label>重复方式<select v-model="draft.repeat"><option value="weekly">每周指定日期</option><option value="daily">每天</option><option value="once">仅执行一次</option></select></label><fieldset v-if="draft.repeat==='weekly'"><legend>星期</legend><div class="days"><label v-for="day in weekdays" :key="day.n"><input type="checkbox" v-model="draft.weekdays" :value="day.n"><span>{{day.label}}</span></label></div></fieldset><label v-if="draft.repeat==='once'">执行日期<DatePicker v-model="draft.date" /></label><label>时区<input v-model="draft.timezone" required placeholder="Asia/Shanghai"></label><p class="form-note">关机前会有 60 秒倒计时。错过的关机不会补执行；开机计划需要设备支持 RTC 唤醒。</p><div v-if="error" class="notice danger">{{error}}</div><div class="dialog-actions"><button type="button" :disabled="busy" @click="editor=false">取消</button><button class="primary" :disabled="busy" type="submit">{{busy?'保存中…':'保存计划'}}</button></div></form></section></div>
  </main>
 </template>
