@@ -89,3 +89,35 @@ cat /sys/class/rtc/rtc0/wakealarm
 用一次关机倒计时取消和一次真实关机/RTC 唤醒测试，再验证两组以上开关机以及重启后计划恢复。
 确认停止应用后 timer 仍存在、禁用规则后 timer 删除、卸载后无遗留 timer。
 Unix Socket 激活、应用生命周期和真实 RTC 唤醒仍需在目标 fnOS 实测，本地自动测试不能代替实机验收。
+
+
+## GitHub 自动构建与发布
+
+用户下载安装包应使用 [Releases](https://github.com/Simlym/fnos-power-scheduler/releases)。以下内容面向维护者，不需要普通使用者操作。
+
+| 触发方式 | 构建结果 | 是否创建 Release |
+| --- | --- | --- |
+| 提交到 `main`、向 `main` 提交 PR | 自动测试、构建和验证 FPK；Artifacts 保留 14 天 | 否 |
+| 在 Actions 中手动运行 `Build and release` | 同上 | 否 |
+| 推送与项目版本一致的 `v*` 标签 | 自动测试、构建和验证 FPK，上传 FPK 和 SHA256 到 Release | 是 |
+
+每次发布之前，同步下面文件中的版本号：
+
+- `Cargo.toml` 和 `Cargo.lock` 的项目版本
+- `fpk/manifest`
+- `web/package.json` 和 `web/package-lock.json`（包含根包版本）
+
+例如发布 `0.2.3`：
+
+```sh
+python scripts/check_version.py --tag v0.2.3
+git push origin main
+git tag -a v0.2.3 -m "Release 0.2.3"
+git push origin v0.2.3
+```
+
+推送标签之后，等待 Actions 中 `Build and release` 成功，安装包会自动出现在对应 Release 的 **Assets** 下载区，**不必手动把安装包上传到标签**。发布使用 GitHub 提供的令牌，无需额外配置个人访问令牌。
+
+带后缀版本如 `0.2.3-rc.1` 会标记为预发布，不更新最新正式版固定下载链接。构建失败不会发布；修复后发布新版本标签，或者在尚未创建 Release 时重新运行失败任务。已经存在的 Release 不会被自动覆盖。
+
+正式发布前，需确保仓库允许 GitHub Actions 运行。自动构建不能替代目标设备上的真实关机及 RTC 唤醒测试。
