@@ -1,109 +1,115 @@
-# fnos-power-scheduler · 电源计划
+# 电源计划 · fnOS Power Scheduler
 
-为飞牛 fnOS 提供定时关机与 RTC 定时开机的应用，支持单次、每天和每周计划，以及一天内多组开关机安排。计划和执行记录保存在本机，关机由 systemd timer 调度，开机由设备的 RTC 硬件闹钟触发。
+**让飞牛 NAS 按你的时间表自动关机、自动开机。**
 
-## 下载与安装
+「电源计划」是一款面向 [飞牛 fnOS](https://www.fnnas.com/) 的第三方应用。不用写脚本，也不用配置定时任务，在网页里就能设置 **单次、每天、每周** 的开关机计划，一天还可以安排多次。
 
-1. 在 [GitHub Releases](https://github.com/Simlym/fnos-power-scheduler/releases) 下载 `fnos-power-scheduler.fpk`，也可使用[最新正式版固定下载链接](https://github.com/Simlym/fnos-power-scheduler/releases/latest/download/fnos-power-scheduler.fpk)。
-2. 通过飞牛应用管理的手动安装入口安装 FPK；更新前先备份应用数据。
-3. 打开「电源计划」，添加并保存计划，检查应用结果及下一次开关机时间。
-4. 首次使用先验证关机倒计时取消，再在设备上测试真实关机与 RTC 开机。
+**[⬇️ 下载最新版 FPK](https://github.com/Simlym/fnos-power-scheduler/releases/latest/download/fnos-power-scheduler.fpk)** · [查看所有版本](https://github.com/Simlym/fnos-power-scheduler/releases) · [反馈问题](https://github.com/Simlym/fnos-power-scheduler/issues)
 
-每个发布版本附带 `fnos-power-scheduler.fpk.sha256` 校验文件。请下载 FPK 附件安装；GitHub 自动生成的 Source code 压缩包是源码。
+> **先了解一件事：** 自动关机由 fnOS 执行；自动开机依靠主板的 **RTC 定时唤醒** 功能。不是所有 NAS 硬件都支持自动开机，请先阅读下方的[兼容性说明](#使用前必读)。
 
-### 适用条件
+## 能做什么？
 
-- 当前安装包面向 **fnOS x86_64**，声明的最低系统版本为 **1.1.3100**。
-- 定时开机需要主板和固件支持关机状态下的 RTC 唤醒，不同设备需分别测试。
-- 当前支持 UTC 硬件时钟；检测到 `/etc/adjtime` 为 `LOCAL` 时拒绝写入并显示错误。
-- 项目仍在开发阶段，尚未通过飞牛应用中心审核；GitHub 发布不等于应用中心上架。
+- **定时关机**：到点提醒，60 秒倒计时内可以取消本次关机。
+- **定时开机**：提前设置主板 RTC 闹钟，关机后也有机会按计划自动唤醒。
+- **灵活重复**：仅执行一次、每天执行、每周指定星期；支持一天内多组开关机。
+- **计划一目了然**：在「计划总览」查看每周安排和下一次开机、关机时间。
+- **发现冲突**：对重复计划、同一时间开关机、开关机间隔太短等情况给出提示。
+- **可管理、可追踪**：在「计划列表」启用、停用、编辑或删除规则；在「执行记录」查看结果。
 
-## 功能与使用
+### 一个实际例子
 
-- **灵活计划**：单次、每天、每周规则；每项计划独立保存 IANA 时区。
-- **计划总览**：按周一至周日和时间顺序展示周期计划，单次计划按日期另列；显示下一次开关机的日期、星期和时间。
-- **安排提示**：提示重复时间、连续开关机、同时间开关机及关机后五分钟内开机等情况，提示不阻止保存。周期与单次计划分别检查，同一时区内比较。
-- **关机保护**：关机前 60 秒倒计时，可取消本次关机；提供启动保护和任务去重，错过关机不会补执行。
-- **执行反馈**：保存计划和执行记录，显示系统应用失败的原因；关机前写入并读回 RTC，不覆盖其他程序拥有的闹钟。
+假设希望 NAS **工作日早上自动开机、晚上自动关机**，只需要添加两条计划：
 
-**关闭页面或停止应用后，已应用的计划仍会执行。** 停止应用会取消当前关机倒计时；需要暂停自动开关机时，应先禁用全部计划。卸载会清理本应用 timer，以及仍归本应用所有的 RTC 闹钟。
+| 计划名称 | 操作 | 重复方式 | 时间 |
+| --- | --- | --- | --- |
+| 工作日开机 | 开机 | 每周一至周五 | 07:30 |
+| 工作日晚间关机 | 关机 | 每周一至周五 | 23:30 |
 
-应用尚未自动检测备份、存储维护及 Docker 工作负载，请将关机时间安排在设备空闲时段。设备检查、调度细节及实机验收见[开发与运行说明](docs/development.md)。
+如果你还想周末采用另一套时间，可以继续新增计划；不必编写 crontab，也不需要手动维护多个脚本。
 
-## 本地开发
+## 下载安装
 
-需要 Rust 1.96+、Node.js 22.12+ 和 Python 3.11+（版本检查使用标准库 `tomllib`）。后端使用 Rust，前端使用 Vue，数据使用 SQLite。
+**适用系统：fnOS x86_64，最低版本 1.1.3100。** 当前尚未上架飞牛应用中心，需要手动安装。
 
-在项目根目录执行，Windows、Linux 和 macOS 均可用于本地模拟开发：
+1. 打开 [Releases 下载页面](https://github.com/Simlym/fnos-power-scheduler/releases/latest)，下载附件 **`fnos-power-scheduler.fpk`**。
+2. 在 fnOS 的应用管理页面，使用**手动安装**功能选择刚下载的 FPK 文件。
+3. 安装完成后，打开应用「**电源计划**」。
+4. 点击右上角「**新建计划**」，设置开机或关机时间并保存。
 
-```sh
-npm --prefix web ci
-npm --prefix web run build
-cargo test --locked
-python scripts/check_version.py
-python -m unittest discover -s scripts -p 'test_*.py'
-cargo run --locked --bin server
-```
+> 提示：请下载 Release **Assets** 中的 `.fpk`，不要下载 GitHub 自动生成的 `Source code.zip`（那是源码，不能作为应用安装）。每个发布版本还提供 SHA256 校验文件。升级前建议备份应用数据。
 
-若系统的 Python 命令为 `python3`，请相应替换。打开 `http://127.0.0.1:8787`；模拟模式不安装系统 timer、不修改 RTC、不执行关机。调试前端时可另开终端运行 `npm --prefix web run dev`，Vite 会代理后台 API。
+## 第一次怎么设置？
 
-## 构建飞牛安装包
+以“周一至周五 23:30 关机”为例：
 
-构建目标为 Linux x86_64，打包使用 fnpack 1.2.3。设备本身不需要安装开发工具。
+1. 点击「**新建计划**」。
+2. **计划名称**填写“工作日晚间关机”。
+3. **电源操作**选择“关机”，**执行时间**设为 `23:30`。
+4. **重复方式**选择“每周指定日期”，勾选周一至周五。
+5. 检查**时区**，例如中国大陆使用 `Asia/Shanghai`，然后点击「**保存计划**」。
 
-### Linux
+保存后，你可以通过页面完成这些操作：
 
-准备上述开发工具、`musl-gcc` 和 fnpack，将 fnpack 放入 PATH，然后执行：
+| 页面位置 | 用来做什么 |
+| --- | --- |
+| **计划总览** | 按星期查看安排；确认下一次开机、关机时间 |
+| **计划列表** | 启用、停用、编辑、删除计划 |
+| **执行记录** | 查看倒计时、取消、跳过及执行失败等记录 |
 
-```sh
-rustup target add x86_64-unknown-linux-musl
-CC_x86_64_unknown_linux_musl=musl-gcc \
-CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=musl-gcc \
-bash scripts/build.sh
-```
+建议第一次**先创建一个即将触发的关机测试计划**，验证 60 秒倒计时及“取消本次关机”按钮，再在确认无重要任务运行时测试真实关机和自动开机。
 
-### Windows
+## 使用前必读
 
-另外准备 Zig 0.14.1 和 Windows 版 fnpack，将工具路径替换为本机位置：
+自动关机与自动开机的实现方式不同：
 
-```powershell
-rustup target add x86_64-unknown-linux-musl
-.\scripts\build.ps1 -ZigPath '路径\zig.exe' -FnpackPath '路径\fnpack.exe'
-```
-
-两种方式都会生成 `dist/fnos-power-scheduler.fpk` 和同名 `.sha256` 文件。可进一步检查安装包结构、Linux x86_64 程序、脚本换行和执行权限：
-
-```sh
-python scripts/fpk.py verify dist/fnos-power-scheduler.fpk
-```
-
-## GitHub 自动构建与发布
-
-| 触发方式 | 构建结果 | 是否发布 Release |
+| 功能 | 工作原理 | 需要注意 |
 | --- | --- | --- |
-| 提交到 `main`、向 `main` 提交 PR | 测试、构建、验证 FPK；产物保存在 Actions 的 Artifacts 中，保留 14 天 | 否 |
-| 在 Actions 手动运行 `Build and release` | 同上 | 否 |
-| 推送与项目版本一致的 `v*` 标签 | 同上；自动创建 Release 并上传 FPK 和 SHA256 文件 | 是 |
+| 定时关机 | fnOS 的 systemd timer 到点触发关机流程 | 关机前有 60 秒取消机会；错过时间不会补关机 |
+| 定时开机 | 系统提前向主板 RTC 写入下一次唤醒时间 | 必须有硬件和固件支持；不同主板需实际测试 |
 
-**无需手工把安装包上传到标签。** 推送版本标签后，等待 `Build and release` 成功，安装包会自动出现在对应 Release 的 Assets 下载区。发布使用 GitHub 提供的令牌，无需另配个人访问令牌。
+特别注意：
 
-发布前同步 `Cargo.toml`、`Cargo.lock` 中的项目版本、`fpk/manifest`、`web/package.json` 和 `web/package-lock.json`（包括根包版本）。先提交版本变更，再发布与版本完全一致的标签。例如下一版本为 `0.2.3` 时：
+- **RTC 兼容性决定能否自动开机。** 主板 BIOS/UEFI 必须支持关机状态下的 RTC 唤醒，关机后也要保持供电。某些 BIOS 内置的固定 RTC 闹钟设置可能与系统写入的闹钟冲突。
+- **目前仅支持 UTC 硬件时钟。** 如果设备将硬件时钟配置为 `LOCAL`，应用会拒绝写入 RTC 并显示错误，避免出现错误的唤醒时间。
+- **不要把自动关机安排在重要任务进行时。** 目前不会自动识别 Docker、下载、备份或存储维护任务，请自行避开这些时段。
+- **计划应用失败需要处理。** 如果页面提示“计划尚未完全应用”，请检查错误信息；修复设备问题后，重新保存计划以重试。
 
-```sh
-python scripts/check_version.py --tag v0.2.3
-git push origin main
-git tag -a v0.2.3 -m "Release 0.2.3"
-git push origin v0.2.3
-```
+项目曾在 **Cloudstar ITX-C246** 设备上完成真实关机和 RTC 开机测试；**这不代表其他主板均能成功唤醒**。建议先测试，再用于长期无人值守。
 
-带后缀的版本（如 `0.2.3-rc.1`）会标记为预发布，不更新最新正式版固定下载链接。构建失败不会发布；修复后发布新版本标签，或在尚未创建 Release 时重新运行失败任务。已有 Release 不会被自动覆盖。
+## 常见问题
 
-正式发布前需确认仓库允许 GitHub Actions 运行。自动构建不能代替目标设备上的真实关机及 RTC 唤醒测试。
+### 关闭网页以后，计划还会执行吗？
 
-## 更多说明
+**会。** 已成功应用的计划由系统调度，不依赖网页一直打开。
 
-- [开发、权限模型、调度机制与设备验收](docs/development.md)
-- [版本下载与更新记录](https://github.com/Simlym/fnos-power-scheduler/releases)
-- [问题反馈](https://github.com/Simlym/fnos-power-scheduler/issues)
+### 在 fnOS 中停止应用，就能暂停自动开关机吗？
+
+**不能。** 停止应用会取消当前正在进行的关机倒计时，但已应用的定时规则仍可能继续执行。要暂停，请先到「计划列表」**停用全部计划**。
+
+### 关机以后，软件不是停止了吗？怎么还能自动开机？
+
+应用会在关机前将下一次唤醒时间写入主板 **RTC 硬件闹钟**。如果硬件支持，即使操作系统已经关闭，主板仍可按预设时间唤醒设备。它不是通过后台程序“在关机后运行”。
+
+### 为什么定时关机正常，但没有自动开机？
+
+优先确认主板是否支持 RTC 唤醒、BIOS/UEFI 设置是否与系统闹钟冲突、设备是否持续供电，以及页面是否显示 RTC 写入失败。不同设备的 BIOS 选项名称不一致，不能保证所有机型都兼容。
+
+### 到点了却没有关机，是不是漏执行了？
+
+应用有安全保护：系统启动或应用启动后的短时间内会跳过关机；关机前若 RTC 设置或读回检查失败，也可能为避免设备无法按计划再开机而取消关机。请查看「执行记录」和页面错误信息。错过的关机不会补执行。
+
+### 卸载会怎样？
+
+卸载会清理本应用创建的定时器，以及仍由本应用拥有的 RTC 闹钟。卸载前建议先禁用计划，并按需备份应用数据。
+
+## 项目状态与开发
+
+- **当前状态**：开发阶段，GitHub 发布版本不代表已通过飞牛应用中心审核。
+- **技术栈**：Rust（后台与电源控制）+ Vue（管理界面）+ SQLite（计划及执行记录）。
+- **本地开发**：支持模拟模式，可查看和管理规则；模拟模式**不会真正关机、设置 RTC 或安装系统 timer**。
+- **开发文档**：[构建安装包、实现原理、权限设计、设备验收和 CI/CD](docs/development.md)。
+
+欢迎通过 [Issues](https://github.com/Simlym/fnos-power-scheduler/issues) 反馈硬件兼容问题或功能建议。反馈时可附上 fnOS 版本、主板型号、计划设置与错误信息（请勿公开敏感数据）。
 
 许可证尚待确定。
