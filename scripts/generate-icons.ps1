@@ -14,7 +14,7 @@ function New-RoundedPath([single]$x,[single]$y,[single]$width,[single]$height,[s
  $path.CloseFigure()
  return ,$path
 }
-foreach ($taskSize in @(64,256)) {
+foreach ($taskSize in @(256)) {
  $taskCanvas=[System.Drawing.Bitmap]::new(768,768)
  $taskGraphics=[System.Drawing.Graphics]::FromImage($taskCanvas)
  $taskGraphics.SmoothingMode=[System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
@@ -53,5 +53,8 @@ foreach ($taskSize in @(64,256)) {
  $taskBitmap.Save((Join-Path $taskImages "icon_$taskSize.png"),[System.Drawing.Imaging.ImageFormat]::Png)
  foreach ($taskResource in @($taskOutput,$taskBitmap,$taskHand,$taskClockFace,$taskClockBack,$taskPen,$taskBorder,$taskEdge,$taskShine,$taskGradient,$taskTile,$taskGraphics,$taskCanvas)) { $taskResource.Dispose() }
 }
-Copy-Item -LiteralPath "$taskImages\icon_64.png" -Destination "$taskRoot\fpk\ICON.PNG" -Force
+# fnOS enlarges the small-icon paths on high-DPI screens and detail pages.
+# Keep the expected filenames, but serve the 256 px artwork from every path.
+Copy-Item -LiteralPath "$taskImages\icon_256.png" -Destination "$taskImages\icon_64.png" -Force
+Copy-Item -LiteralPath "$taskImages\icon_256.png" -Destination "$taskRoot\fpk\ICON.PNG" -Force
 Copy-Item -LiteralPath "$taskImages\icon_256.png" -Destination "$taskRoot\fpk\ICON_256.PNG" -Force
